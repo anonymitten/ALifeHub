@@ -31,7 +31,53 @@ const { useState, useEffect, useRef } = React;
 
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.16-12";
+const APP_VERSION = "2026.07.16-15";
+
+// ── Felles: Drag & drop-sorterbar liste ────────────────────────────────────────
+function DragSortList({ items, onReorder, onDelete, renderLabel, accentColor, t }) {
+  const dragIdx = useRef(null);
+  const [dragging, setDragging] = useState(null);
+
+  function handleDragStart(idx) { dragIdx.current = idx; setDragging(idx); }
+  function handleDragOver(e, idx) {
+    e.preventDefault();
+    if (dragIdx.current === null || dragIdx.current === idx) return;
+    const updated = [...items];
+    const [moved] = updated.splice(dragIdx.current, 1);
+    updated.splice(idx, 0, moved);
+    dragIdx.current = idx;
+    onReorder(updated);
+  }
+  function handleDragEnd() { dragIdx.current = null; setDragging(null); }
+
+  const accent = accentColor || t.purple;
+
+  return (
+    <div>
+      {items.map((item, idx) => (
+        <div key={typeof item === "string" ? item + idx : item.id || idx}
+          draggable
+          onDragStart={() => handleDragStart(idx)}
+          onDragOver={e => handleDragOver(e, idx)}
+          onDragEnd={handleDragEnd}
+          style={{ display: "flex", alignItems: "center", gap: 10,
+            background: dragging === idx ? accent + "18" : t.bg,
+            border: `1px solid ${dragging === idx ? accent : t.border}`,
+            borderRadius: 10, padding: "10px 12px", marginBottom: 8,
+            cursor: "grab", transition: "background 0.15s, border-color 0.15s" }}>
+          <span style={{ color: t.textFaint, fontSize: 16, flexShrink: 0, userSelect: "none" }}>⠿</span>
+          <span style={{ flex: 1, fontSize: 14, color: t.text }}>
+            {renderLabel ? renderLabel(item) : (typeof item === "string" ? item : item.navn || item.name || "")}
+          </span>
+          {onDelete && (
+            <button onClick={() => onDelete(idx)}
+              style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 16, padding: "0 2px", flexShrink: 0 }}>×</button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── Theme ──────────────────────────────────────────────────────────────────────
 const THEMES = {
@@ -7877,6 +7923,9 @@ function OrgSettingsModal({ settings, onSave, onClose, t }) {
   function removeItem(key, idx) {
     setS(prev => ({ ...prev, [key]: prev[key].filter((_, i) => i !== idx) }));
   }
+  function reorderItem(key, newArr) {
+    setS(prev => ({ ...prev, [key]: newArr }));
+  }
 
   return (
     <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 400, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
@@ -7908,14 +7957,15 @@ function OrgSettingsModal({ settings, onSave, onClose, t }) {
         <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 40px" }}>
           <OrgListEditor items={s[activeTab]} listKey={activeTab}
             onAdd={val => addItem(activeTab, val)}
-            onRemove={idx => removeItem(activeTab, idx)} t={t} />
+            onRemove={idx => removeItem(activeTab, idx)}
+            onReorder={newArr => reorderItem(activeTab, newArr)} t={t} />
         </div>
       </div>
     </div>
   );
 }
 
-function OrgListEditor({ items, listKey, onAdd, onRemove, t }) {
+function OrgListEditor({ items, listKey, onAdd, onRemove, onReorder, t }) {
   const [newVal, setNewVal] = useState("");
   return (
     <div>
@@ -7927,12 +7977,8 @@ function OrgListEditor({ items, listKey, onAdd, onRemove, t }) {
         <button onClick={() => { onAdd(newVal); setNewVal(""); }}
           style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid #c084fc", background: "#c084fc20", color: "#c084fc", cursor: "pointer", fontWeight: 700 }}>+</button>
       </div>
-      {items.map((item, idx) => (
-        <div key={idx} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${t.border}` }}>
-          <span style={{ flex: 1, fontSize: 14, color: t.text }}>{item}</span>
-          <button onClick={() => onRemove(idx)} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer", fontSize: 16 }}>🗑</button>
-        </div>
-      ))}
+      <DragSortList items={items} onReorder={onReorder || (() => {})}
+        onDelete={onRemove} accentColor="#c084fc" t={t} />
     </div>
   );
 }
@@ -12385,41 +12431,20 @@ function PassordSettingsModal({ settings, onSave, onClose, t }) {
     setKategorier([...kategorier, v]);
     setNyKat("");
   }
-  function slett(i) { setKategorier(kategorier.filter((_, idx) => idx !== i)); }
-  function flytt(i, dir) {
-    const arr = [...kategorier];
-    const j = i + dir;
-    if (j < 0 || j >= arr.length) return;
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-    setKategorier(arr);
-  }
-  function handleSave() { onSave({ ...settings, kategorier }); }
 
   const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", flex: 1, boxSizing: "border-box" };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "85vh", overflowY: "auto" }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 6 }}>⚙️ Kategorier</div>
-        <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20 }}>Dra i pilene for å endre rekkefølge.</div>
+        <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 4 }}>⚙️ Kategorier</div>
+        <div style={{ fontSize: 13, color: t.textFaint, marginBottom: 16 }}>Dra i ⠿ for å endre rekkefølge.</div>
 
-        <div style={{ marginBottom: 16 }}>
-          {kategorier.map((k, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <button onClick={() => flytt(i, -1)} disabled={i === 0}
-                  style={{ background: "none", border: "none", color: i === 0 ? t.border : t.textMuted, cursor: i === 0 ? "default" : "pointer", fontSize: 12, lineHeight: 1, padding: "1px 4px" }}>▲</button>
-                <button onClick={() => flytt(i, 1)} disabled={i === kategorier.length - 1}
-                  style={{ background: "none", border: "none", color: i === kategorier.length - 1 ? t.border : t.textMuted, cursor: i === kategorier.length - 1 ? "default" : "pointer", fontSize: 12, lineHeight: 1, padding: "1px 4px" }}>▼</button>
-              </div>
-              <span style={{ flex: 1, fontSize: 14, color: t.text }}>{k}</span>
-              <button onClick={() => slett(i)}
-                style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>×</button>
-            </div>
-          ))}
-        </div>
+        <DragSortList items={kategorier} onReorder={setKategorier}
+          onDelete={idx => setKategorier(kategorier.filter((_, i) => i !== idx))}
+          accentColor={t.purple} t={t} />
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 24, marginTop: 8 }}>
           <input value={nyKat} onChange={e => setNyKat(e.target.value)}
             onKeyDown={e => e.key === "Enter" && leggTil()}
             placeholder="Ny kategori..." style={inputSt} />
@@ -12429,7 +12454,7 @@ function PassordSettingsModal({ settings, onSave, onClose, t }) {
 
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onClose} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.bg, color: t.textMuted, fontWeight: 700, cursor: "pointer" }}>Avbryt</button>
-          <button onClick={handleSave} style={{ flex: 2, padding: "14px", borderRadius: 12, border: "none", background: t.purple, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Lagre</button>
+          <button onClick={() => onSave({ ...settings, kategorier })} style={{ flex: 2, padding: "14px", borderRadius: 12, border: "none", background: t.purple, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Lagre</button>
         </div>
       </div>
     </div>
@@ -13185,10 +13210,26 @@ function saveFavorittvideoer(data) {
   try { localStorage.setItem("hemmelig:favorittvideoer", JSON.stringify(data)); } catch(_) {}
 }
 
-const FV_DEFAULT_KATEGORIER = ["Solo", "Par", "Gruppe", "Fantasy", "Kostyme", "Amatør", "Spesielt"];
+const FV_DEFAULT_KATEGORIER = [
+  { gruppe: "Kroppstype", kats: ["Twink", "Bear / Daddy", "Muskuløs", "Fyldig", "Hårete"] },
+  { gruppe: "Dynamikk / roller", kats: ["Solo", "Par", "Gruppe", "Top", "Bottom", "Vers", "Dom / Sub"] },
+  { gruppe: "Stil / tempo", kats: ["Romantisk", "Voldsom / Rå", "Passionert", "POV"] },
+  { gruppe: "Setting", kats: ["Amatør", "Offentlig / Utendørs", "Locker room", "Hotell"] },
+  { gruppe: "Sjanger / fetish", kats: ["Fantasy / Rollespill", "Kostyme / Uniform", "Fetish", "BDSM / Bondage", "Leather / Lær"] },
+  { gruppe: "Annet", kats: ["Favoritt", "Vil se igjen", "Klassiker"] },
+];
 
 function loadFvSettings() {
-  try { const r = localStorage.getItem("hemmelig:favorittvideoer:settings"); return r ? JSON.parse(r) : { kategorier: FV_DEFAULT_KATEGORIER }; } catch(_) { return { kategorier: FV_DEFAULT_KATEGORIER }; }
+  try {
+    const r = localStorage.getItem("hemmelig:favorittvideoer:settings");
+    if (!r) return { kategorier: FV_DEFAULT_KATEGORIER };
+    const parsed = JSON.parse(r);
+    // Migrate from flat string array to grouped structure
+    if (Array.isArray(parsed.kategorier) && parsed.kategorier.length > 0 && typeof parsed.kategorier[0] === "string") {
+      return { ...parsed, kategorier: [{ gruppe: "Mine kategorier", kats: parsed.kategorier }] };
+    }
+    return parsed;
+  } catch(_) { return { kategorier: FV_DEFAULT_KATEGORIER }; }
 }
 function saveFvSettings(data) {
   try { localStorage.setItem("hemmelig:favorittvideoer:settings", JSON.stringify(data)); } catch(_) {}
@@ -13199,6 +13240,11 @@ function fvDomain(url) {
     const u = new URL(url);
     return u.hostname.replace(/^www\./, "");
   } catch(_) { return url.length > 30 ? url.slice(0, 30) + "…" : url; }
+}
+
+// Flat list of all kats from grouped structure
+function fvAlleKats(kategorier) {
+  return kategorier.flatMap(g => g.kats || []);
 }
 
 function FvModal({ entry, onSave, onClose, t, kategorier }) {
@@ -13265,16 +13311,23 @@ function FvModal({ entry, onSave, onClose, t, kategorier }) {
 
         <div style={{ marginBottom: 16 }}>
           <span style={lblSt}>Kategorier (velg én eller flere)</span>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {kategorier.map(k => (
-              <button key={k} onClick={() => toggleKat(k)}
-                style={{ padding: "8px 14px", borderRadius: 20, border: `2px solid ${valgtKats.includes(k) ? t.pink : t.border}`,
-                  background: valgtKats.includes(k) ? t.pinkDim : t.bg, color: valgtKats.includes(k) ? t.pink : t.textMuted,
-                  fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                {k}
-              </button>
-            ))}
-          </div>
+          {kategorier.map(g => (
+            <div key={g.gruppe} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: t.textFaint, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>{g.gruppe}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {(g.kats || []).map(k => (
+                  <button key={k} onClick={() => toggleKat(k)}
+                    style={{ padding: "7px 12px", borderRadius: 20,
+                      border: `2px solid ${valgtKats.includes(k) ? t.pink : t.border}`,
+                      background: valgtKats.includes(k) ? t.pinkDim : t.bg,
+                      color: valgtKats.includes(k) ? t.pink : t.textMuted,
+                      fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                    {k}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
 
         <ScaleRow label="⭐ Helhetsvurdering" val={helhet} setVal={setHelhet} />
@@ -13292,17 +13345,24 @@ function FvModal({ entry, onSave, onClose, t, kategorier }) {
 }
 
 function FvKort({ video, t, onEdit, onDelete }) {
-  const snitt = ((video.helhet + video.intensitet + video.tenner) / 3).toFixed(1);
+  const snitt = ((video.helhet + video.intensitet + video.tenner) / 3);
+  const snittStr = snitt.toFixed(1);
   const scaleColors = ["","#ef4444","#f97316","#eab308","#22c55e","#c084fc"];
+  const snittFarge = snitt >= 4.5 ? "#c084fc" : snitt >= 3.5 ? "#22c55e" : snitt >= 2.5 ? "#eab308" : "#f97316";
 
-  function aapne() {
-    window.open(video.url, "_blank", "noopener,noreferrer");
-  }
+  function aapne() { window.open(video.url, "_blank", "noopener,noreferrer"); }
 
   return (
     <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 10 }}>
       <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text, lineHeight: 1.5, marginBottom: 6 }}>{video.beskrivelse}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, lineHeight: 1.5, flex: 1 }}>{video.beskrivelse}</div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0,
+            background: snittFarge + "22", border: `2px solid ${snittFarge}`, borderRadius: 10, padding: "4px 10px", minWidth: 44 }}>
+            <span style={{ fontSize: 18, fontWeight: 900, color: snittFarge, lineHeight: 1 }}>{snittStr}</span>
+            <span style={{ fontSize: 9, color: snittFarge, fontWeight: 700, letterSpacing: 0.5 }}>SCORE</span>
+          </div>
+        </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
           {(video.kategorier || []).map(k => (
             <span key={k} style={{ fontSize: 11, color: t.pink, background: t.pinkDim, padding: "2px 8px", borderRadius: 20 }}>{k}</span>
@@ -13329,22 +13389,52 @@ function FvKort({ video, t, onEdit, onDelete }) {
   );
 }
 
-function FvKategoriGruppe({ navn, videoer, t, onEdit, onDelete }) {
+function FvKategoriGruppe({ gruppenavn, undergrupper, t, onEdit, onDelete }) {
+  // gruppenavn = overordnet gruppenavn (f.eks. "Kroppstype")
+  // undergrupper = [{ navn: "Twink", videoer: [...] }, ...]
   const [open, setOpen] = useState(false);
+  const totalt = undergrupper.reduce((s, g) => s + g.videoer.length, 0);
+
   return (
     <div style={{ marginBottom: 12 }}>
       <button onClick={() => setOpen(!open)}
         style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: t.surface, border: `1px solid ${t.border}`, borderRadius: open ? "12px 12px 0 0" : 12,
+          background: t.surface, border: `1px solid ${t.border}`,
+          borderRadius: open ? "12px 12px 0 0" : 12,
           padding: "12px 16px", cursor: "pointer" }}>
-        <span style={{ fontWeight: 700, fontSize: 14, color: t.pink }}>{navn}</span>
+        <span style={{ fontWeight: 700, fontSize: 15, color: t.pink }}>{gruppenavn}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12, color: t.textMuted, background: t.bg, padding: "2px 8px", borderRadius: 20 }}>{videoer.length}</span>
+          <span style={{ fontSize: 12, color: t.textMuted, background: t.bg, padding: "2px 8px", borderRadius: 20 }}>{totalt}</span>
           <span style={{ fontSize: 14, color: t.textMuted }}>{open ? "▲" : "▼"}</span>
         </div>
       </button>
       {open && (
-        <div style={{ border: `1px solid ${t.border}`, borderTop: "none", borderRadius: "0 0 12px 12px", padding: "10px 10px 2px" }}>
+        <div style={{ border: `1px solid ${t.border}`, borderTop: "none", borderRadius: "0 0 12px 12px", padding: "10px 10px 6px" }}>
+          {undergrupper.map(ug => (
+            <FvUndergruppe key={ug.navn} navn={ug.navn} videoer={ug.videoer} t={t} onEdit={onEdit} onDelete={onDelete} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FvUndergruppe({ navn, videoer, t, onEdit, onDelete }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <button onClick={() => setOpen(!open)}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: t.bg, border: `1px solid ${t.border}`, borderRadius: open ? "10px 10px 0 0" : 10,
+          padding: "9px 14px", cursor: "pointer" }}>
+        <span style={{ fontWeight: 600, fontSize: 13, color: t.textMuted }}>{navn}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: t.textFaint, background: t.surface, padding: "1px 7px", borderRadius: 20 }}>{videoer.length}</span>
+          <span style={{ fontSize: 12, color: t.textFaint }}>{open ? "▲" : "▼"}</span>
+        </div>
+      </button>
+      {open && (
+        <div style={{ border: `1px solid ${t.border}`, borderTop: "none", borderRadius: "0 0 10px 10px", padding: "8px 8px 0" }}>
           {videoer.map(v => (
             <FvKort key={v.id} video={v} t={t}
               onEdit={() => onEdit(v)}
@@ -13357,49 +13447,119 @@ function FvKategoriGruppe({ navn, videoer, t, onEdit, onDelete }) {
 }
 
 function FvSettingsModal({ settings, onSave, onClose, t }) {
-  const [kategorier, setKategorier] = useState([...settings.kategorier]);
-  const [nyKat, setNyKat] = useState("");
+  const [grupper, setGrupper] = useState(settings.kategorier.map(g => ({
+    ...g, kats: [...(g.kats || [])]
+  })));
+  const [nyGruppe, setNyGruppe] = useState("");
+  const [nyKats, setNyKats] = useState({}); // gruppeIdx -> string
+  const [expandert, setExpandert] = useState({});
+  const dragGruppeIdx = useRef(null);
+  const [draggingGruppe, setDraggingGruppe] = useState(null);
 
-  function leggTil() {
-    const v = nyKat.trim();
-    if (!v || kategorier.includes(v)) return;
-    setKategorier([...kategorier, v]);
-    setNyKat("");
+  function toggleExpandert(i) { setExpandert(prev => ({ ...prev, [i]: !prev[i] })); }
+
+  function leggTilGruppe() {
+    const v = nyGruppe.trim();
+    if (!v) return;
+    const ny = grupper.length;
+    setGrupper([...grupper, { gruppe: v, kats: [] }]);
+    setNyGruppe("");
+    setExpandert(prev => ({ ...prev, [ny]: true }));
   }
-  function slett(i) { setKategorier(kategorier.filter((_, idx) => idx !== i)); }
-  function flytt(i, dir) {
-    const arr = [...kategorier]; const j = i + dir;
-    if (j < 0 || j >= arr.length) return;
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-    setKategorier(arr);
+  function slettGruppe(i) {
+    setGrupper(grupper.filter((_, idx) => idx !== i));
+  }
+  function oppdaterGruppenavn(i, navn) {
+    setGrupper(grupper.map((g, idx) => idx === i ? { ...g, gruppe: navn } : g));
+  }
+  function leggTilKat(i) {
+    const v = (nyKats[i] || "").trim();
+    if (!v) return;
+    setGrupper(grupper.map((g, idx) => idx === i ? { ...g, kats: [...g.kats, v] } : g));
+    setNyKats(prev => ({ ...prev, [i]: "" }));
+  }
+  function slettKat(gi, ki) {
+    setGrupper(grupper.map((g, idx) => idx === gi ? { ...g, kats: g.kats.filter((_, kidx) => kidx !== ki) } : g));
+  }
+  function reorderKats(gi, newKats) {
+    setGrupper(grupper.map((g, idx) => idx === gi ? { ...g, kats: newKats } : g));
   }
 
-  const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", flex: 1, boxSizing: "border-box" };
+  // Drag for grupper
+  function handleGruppeDragStart(i) { dragGruppeIdx.current = i; setDraggingGruppe(i); }
+  function handleGruppeDragOver(e, i) {
+    e.preventDefault();
+    if (dragGruppeIdx.current === null || dragGruppeIdx.current === i) return;
+    const updated = [...grupper];
+    const [moved] = updated.splice(dragGruppeIdx.current, 1);
+    updated.splice(i, 0, moved);
+    dragGruppeIdx.current = i;
+    // Keep expand state in sync
+    setExpandert(prev => {
+      const keys = Object.keys(prev);
+      const newPrev = {};
+      keys.forEach(k => { newPrev[k] = prev[k]; });
+      return newPrev;
+    });
+    setGrupper(updated);
+  }
+  function handleGruppeDragEnd() { dragGruppeIdx.current = null; setDraggingGruppe(null); }
+
+  const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", flex: 1, boxSizing: "border-box" };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "85vh", overflowY: "auto" }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>⚙️ Kategorier</div>
-        <div style={{ marginBottom: 16 }}>
-          {kategorier.map((k, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <button onClick={() => flytt(i, -1)} disabled={i === 0} style={{ background: "none", border: "none", color: i === 0 ? t.border : t.textMuted, cursor: i === 0 ? "default" : "pointer", fontSize: 12, padding: "1px 4px" }}>▲</button>
-                <button onClick={() => flytt(i, 1)} disabled={i === kategorier.length-1} style={{ background: "none", border: "none", color: i === kategorier.length-1 ? t.border : t.textMuted, cursor: i === kategorier.length-1 ? "default" : "pointer", fontSize: 12, padding: "1px 4px" }}>▼</button>
-              </div>
-              <span style={{ flex: 1, fontSize: 14, color: t.text }}>{k}</span>
-              <button onClick={() => slett(i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 16 }}>×</button>
+      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "92vh", overflowY: "auto" }}>
+        <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 4 }}>⚙️ Kategorier</div>
+        <div style={{ fontSize: 13, color: t.textFaint, marginBottom: 16 }}>Dra i ⠿ for å endre rekkefølge på grupper og underkategorier.</div>
+
+        {grupper.map((g, i) => (
+          <div key={i}
+            draggable
+            onDragStart={() => handleGruppeDragStart(i)}
+            onDragOver={e => handleGruppeDragOver(e, i)}
+            onDragEnd={handleGruppeDragEnd}
+            style={{ background: draggingGruppe === i ? t.pinkDim : t.bg, border: `1px solid ${draggingGruppe === i ? t.pink : t.border}`, borderRadius: 12, marginBottom: 10, overflow: "hidden", transition: "border-color 0.15s" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px" }}>
+              <span style={{ color: t.textFaint, fontSize: 16, cursor: "grab", userSelect: "none" }}>⠿</span>
+              <input value={g.gruppe} onChange={e => oppdaterGruppenavn(i, e.target.value)}
+                style={{ flex: 1, background: "transparent", border: "none", color: t.text, fontSize: 14, fontWeight: 700, outline: "none" }} />
+              <span style={{ fontSize: 12, color: t.textFaint, background: t.surface, padding: "2px 8px", borderRadius: 20 }}>{g.kats.length}</span>
+              <button onClick={() => toggleExpandert(i)}
+                style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer", fontSize: 13, padding: "2px 6px" }}>
+                {expandert[i] ? "▲" : "▼"}
+              </button>
+              <button onClick={() => slettGruppe(i)}
+                style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 16, padding: "0 2px" }}>×</button>
             </div>
-          ))}
+            {expandert[i] && (
+              <div style={{ borderTop: `1px solid ${t.border}`, padding: "10px 12px" }}>
+                <DragSortList items={g.kats} onReorder={newKats => reorderKats(i, newKats)}
+                  onDelete={ki => slettKat(i, ki)} accentColor={t.pink} t={t} />
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <input value={nyKats[i] || ""} onChange={e => setNyKats(prev => ({ ...prev, [i]: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && leggTilKat(i)}
+                    placeholder="Ny underkategori..." style={inputSt} />
+                  <button onClick={() => leggTilKat(i)}
+                    style={{ padding: "9px 14px", borderRadius: 10, border: "none", background: t.pink, color: "#fff", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>+</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        <div style={{ display: "flex", gap: 8, marginTop: 8, marginBottom: 24 }}>
+          <input value={nyGruppe} onChange={e => setNyGruppe(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && leggTilGruppe()}
+            placeholder="Ny gruppe..." style={inputSt} />
+          <button onClick={leggTilGruppe}
+            style={{ padding: "9px 14px", borderRadius: 10, border: "none", background: t.purple, color: "#fff", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>+ Gruppe</button>
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-          <input value={nyKat} onChange={e => setNyKat(e.target.value)} onKeyDown={e => e.key === "Enter" && leggTil()}
-            placeholder="Ny kategori..." style={inputSt} />
-          <button onClick={leggTil} style={{ padding: "10px 16px", borderRadius: 10, border: "none", background: t.pink, color: "#fff", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>+ Legg til</button>
-        </div>
+
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onClose} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.bg, color: t.textMuted, fontWeight: 700, cursor: "pointer" }}>Avbryt</button>
-          <button onClick={() => onSave({ ...settings, kategorier })} style={{ flex: 2, padding: "14px", borderRadius: 12, border: "none", background: t.pink, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Lagre</button>
+          <button onClick={() => onSave({ ...settings, kategorier: grupper })}
+            style={{ flex: 2, padding: "14px", borderRadius: 12, border: "none", background: t.pink, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Lagre</button>
         </div>
       </div>
     </div>
@@ -13450,16 +13610,25 @@ function FavorittvideoApp({ t, onBack }) {
     return b.createdAt - a.createdAt;
   });
 
-  const gruppert = (() => {
-    const grupper = [];
-    settings.kategorier.forEach(k => {
-      const items = sorted.filter(v => (v.kategorier || []).includes(k));
-      if (items.length > 0) grupper.push({ navn: k, items });
+  // Build grouped view: for each gruppe, for each kat in that gruppe, collect matching videos
+  const gruppertVisning = (() => {
+    const resultat = [];
+    settings.kategorier.forEach(g => {
+      const undergrupper = (g.kats || []).map(k => ({
+        navn: k,
+        videoer: sorted.filter(v => (v.kategorier || []).includes(k))
+      })).filter(ug => ug.videoer.length > 0);
+      if (undergrupper.length > 0) resultat.push({ gruppenavn: g.gruppe, undergrupper });
     });
+    // Ukategorisert
+    const alleKats = fvAlleKats(settings.kategorier);
     const ukat = sorted.filter(v => !v.kategorier || v.kategorier.length === 0 ||
-      !v.kategorier.some(k => settings.kategorier.includes(k)));
-    if (ukat.length > 0) grupper.push({ navn: "Ukategorisert", items: ukat });
-    return grupper;
+      !v.kategorier.some(k => alleKats.includes(k)));
+    if (ukat.length > 0) resultat.push({
+      gruppenavn: "Ukategorisert",
+      undergrupper: [{ navn: "Ukategorisert", videoer: ukat }]
+    });
+    return resultat;
   })();
 
   const tabSt = active => ({
@@ -13521,8 +13690,8 @@ function FavorittvideoApp({ t, onBack }) {
             onDelete={() => { if(window.confirm("Slett denne videoen?")) handleDelete(v.id); }} />
         ))}
 
-        {visning === "kategorier" && gruppert.map(g => (
-          <FvKategoriGruppe key={g.navn} navn={g.navn} videoer={g.items} t={t}
+        {visning === "kategorier" && gruppertVisning.map(g => (
+          <FvKategoriGruppe key={g.gruppenavn} gruppenavn={g.gruppenavn} undergrupper={g.undergrupper} t={t}
             onEdit={v => { setEditVideo(v); setShowModal(true); }}
             onDelete={id => { if(window.confirm("Slett denne videoen?")) handleDelete(id); }} />
         ))}
@@ -13537,7 +13706,6 @@ function FavorittvideoApp({ t, onBack }) {
     </div>
   );
 }
-
 // ── Hemmelig: Coming Soon sub-app placeholder ──────────────────────────────────
 function HemmeligComingSoon({ name, icon, t, onBack }) {
   return (
