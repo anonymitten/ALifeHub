@@ -31,7 +31,7 @@ const { useState, useEffect, useRef } = React;
 
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.18-02";
+const APP_VERSION = "2026.07.18-03";
 
 // ── Felles: Drag & drop-sorterbar liste ────────────────────────────────────────
 function DragSortList({ items, onReorder, onDelete, renderLabel, accentColor, t }) {
@@ -8594,23 +8594,26 @@ function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t 
         </div>
       </div>
       <div style={{ padding: 16 }}>
-        {/* Sted */}
-        {(entry.steder||[]).length > 0 && (
-          <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>📍 Sted</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {entry.steder.map((s,i) => <span key={i} style={{ background: "#c084fc15", border: "1px solid #c084fc40", borderRadius: 20, padding: "4px 12px", fontSize: 13, color: "#c084fc" }}>{s}</span>)}
-            </div>
-          </div>
-        )}
 
-        {/* Hva gjort kåt */}
-        {(entry.kåtArsaker||[]).length > 0 && (
-          <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>🔥 Hva gjorde meg kåt</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {entry.kåtArsaker.map((k,i) => <span key={i} style={{ background: "#f472b615", border: "1px solid #f472b640", borderRadius: 20, padding: "4px 12px", fontSize: 13, color: "#f472b6" }}>{k}</span>)}
-            </div>
+        {/* Sted + Hva gjorde meg kåt — side om side */}
+        {((entry.steder||[]).length > 0 || (entry.kåtArsaker||[]).length > 0) && (
+          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+            {(entry.steder||[]).length > 0 && (
+              <div style={{ flex: 1, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14 }}>
+                <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>📍 Sted</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {entry.steder.map((s,i) => <span key={i} style={{ background: "#c084fc15", border: "1px solid #c084fc40", borderRadius: 20, padding: "3px 10px", fontSize: 12, color: "#c084fc" }}>{s}</span>)}
+                </div>
+              </div>
+            )}
+            {(entry.kåtArsaker||[]).length > 0 && (
+              <div style={{ flex: 1, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14 }}>
+                <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>🔥 Hva gjorde meg kåt</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {entry.kåtArsaker.map((k,i) => <span key={i} style={{ background: "#f472b615", border: "1px solid #f472b640", borderRadius: 20, padding: "3px 10px", fontSize: 12, color: "#f472b6" }}>{k}</span>)}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -8618,16 +8621,28 @@ function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t 
           {(entry.bonerHva||[]).length > 0 && (
             <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
               <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>🍆 Hva jeg gjorde med den</div>
-              <div style={{ fontSize: 14, color: t.text }}>{entry.bonerHva.join(", ")}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {entry.bonerHva.map((h,i) => <span key={i} style={{ background: "#c084fc15", border: "1px solid #c084fc40", borderRadius: 20, padding: "3px 10px", fontSize: 12, color: "#c084fc" }}>{h}</span>)}
+              </div>
             </div>
           )}
           {(entry.bonerHvorfor||[]).length > 0 && (
             <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
               <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>🤷 Hvorfor ikke mer</div>
-              <div style={{ fontSize: 14, color: t.text }}>{entry.bonerHvorfor.join(", ")}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {entry.bonerHvorfor.map((h,i) => <span key={i} style={{ background: "#c084fc15", border: "1px solid #c084fc40", borderRadius: 20, padding: "3px 10px", fontSize: 12, color: "#c084fc" }}>{h}</span>)}
+              </div>
+            </div>
+          )}
+          {entry.kommentar && (
+            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14 }}>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>Kommentar</div>
+              <div style={{ fontSize: 14, color: t.text, lineHeight: 1.6 }}>{entry.kommentar}</div>
             </div>
           )}
         </>) : (<>
+
+          {/* Rating + Varighet */}
           <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
             <div style={{ flex: 1, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, textAlign: "center" }}>
               <div style={{ fontSize: 28, fontWeight: 900, color: "#f472b6" }}>{entry.helhetsrating}/10</div>
@@ -8639,24 +8654,39 @@ function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t 
             </div>
           </div>
 
-          {(entry.partnere||[]).length > 0 && (
+          {/* Involverte + Aktiviteter — side om side */}
+          {((entry.partnere||[]).length > 0 || (entry.aktiviteter||[]).length > 0) && (
+            <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+              {(entry.partnere||[]).length > 0 && (
+                <div style={{ flex: 1, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14 }}>
+                  <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>Involverte</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                    {entry.partnere.map((p,i) => <span key={i} style={{ background: "#c084fc20", border: "1px solid #c084fc40", borderRadius: 20, padding: "3px 10px", fontSize: 12, color: "#c084fc" }}>{p.navn}</span>)}
+                  </div>
+                </div>
+              )}
+              {(entry.aktiviteter||[]).length > 0 && (
+                <div style={{ flex: 1, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14 }}>
+                  <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>Aktiviteter</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                    {entry.aktiviteter.map((a,i) => <span key={i} style={{ background: "#f472b615", border: "1px solid #f472b640", borderRadius: 20, padding: "3px 10px", fontSize: 12, color: "#f472b6" }}>{a}</span>)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sexleker */}
+          {entry.sexleker && (entry.sexlekerListe||[]).length > 0 && (
             <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
-              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>Involverte</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {entry.partnere.map((p,i) => <span key={i} style={{ background: "#c084fc20", border: "1px solid #c084fc40", borderRadius: 20, padding: "4px 12px", fontSize: 13, color: "#c084fc" }}>{p.navn}</span>)}
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>🧰 Sexleker</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {entry.sexlekerListe.map((s,i) => <span key={i} style={{ background: "#c084fc15", border: "1px solid #c084fc40", borderRadius: 20, padding: "3px 10px", fontSize: 12, color: "#c084fc" }}>{s}</span>)}
               </div>
             </div>
           )}
 
-          {(entry.aktiviteter||[]).length > 0 && (
-            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
-              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8 }}>Aktiviteter</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {entry.aktiviteter.map((a,i) => <span key={i} style={{ background: "#f472b615", border: "1px solid #f472b640", borderRadius: 20, padding: "4px 12px", fontSize: 12, color: "#f472b6" }}>{a}</span>)}
-              </div>
-            </div>
-          )}
-
+          {/* Mine orgasmer */}
           {(entry.mineOrgasmer||[]).length > 0 && (
             <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
               <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10, fontWeight: 700 }}>🔥 Mine orgasmer ({entry.mineOrgasmer.length})</div>
@@ -8667,13 +8697,40 @@ function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t 
                     <span style={{ fontSize: 13, color: t.textMuted }}>{mengdeEmoji[o.mengde]||""} {o.mengde}</span>
                     {o.energi && <span style={{ fontSize: 13, color: energiColor[o.energi]||t.textMuted }}>{o.energi}</span>}
                   </div>
-                  {(o.komSteder||[]).length>0 && <div style={{ fontSize: 12, color: t.textMuted }}>Hvor: {o.komSteder.join(", ")}</div>}
-                  {o.kommentar && <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4, fontStyle: "italic" }}>{o.kommentar}</div>}
+                  {(o.komSteder||[]).length>0 && <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 3 }}>Hvor: {o.komSteder.join(", ")}</div>}
+                  {o.kommentar && <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic" }}>{o.kommentar}</div>}
                 </div>
               ))}
             </div>
           )}
 
+          {/* Partners orgasmer */}
+          {(entry.partnerOrgasmer||[]).filter(po => po.kom === "Ja").length > 0 && (
+            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10, fontWeight: 700 }}>💜 Partners orgasmer</div>
+              {entry.partnerOrgasmer.map((po, i) => {
+                const pNavn = (entry.partnere||[]).find(p => p.type === po.partnerId || p.id === po.partnerId)?.navn || po.partnerId;
+                return (
+                  <div key={i} style={{ borderTop: i>0 ? `1px solid ${t.border}` : "none", paddingTop: i>0 ? 10 : 0, marginTop: i>0 ? 10 : 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: "#c084fc", marginBottom: 5 }}>👤 {pNavn} — {po.kom}</div>
+                    {po.kom === "Ja" && (<>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+                        {po.mengde && <span style={{ fontSize: 13, color: t.textMuted }}>{mengdeEmoji[po.mengde]||""} {po.mengde}</span>}
+                        {po.antentRating && <span style={{ fontSize: 13, color: "#c084fc" }}>{"★".repeat(po.antentRating)}{"☆".repeat(5-po.antentRating)} tente meg</span>}
+                        {po.nytelse && <span style={{ fontSize: 13, color: t.textMuted }}>Nytelse: {po.nytelse}</span>}
+                      </div>
+                      {(po.komSteder||[]).length>0 && <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 3 }}>Hvor: {po.komSteder.join(", ")}</div>}
+                      {(po.smak||[]).length>0 && <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 3 }}>Smak: {po.smak.join(", ")}</div>}
+                      {po.kommentar && <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic" }}>{po.kommentar}</div>}
+                    </>)}
+                    {po.kom !== "Ja" && po.kommentar && <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic" }}>{po.kommentar}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Humør & lyst */}
           <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
             <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 8, fontWeight: 700 }}>Humør & lyst</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, textAlign: "center" }}>
@@ -8690,14 +8747,39 @@ function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t 
               })}
             </div>
           </div>
-        </>)}
 
-        {entry.kommentar && (
-          <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>Kommentar</div>
-            <div style={{ fontSize: 14, color: t.text, lineHeight: 1.6 }}>{entry.kommentar}</div>
-          </div>
-        )}
+          {/* Kondom */}
+          {entry.kondom && (
+            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 4 }}>🛡️ Kondom brukt</div>
+              {entry.kondomKommentar && <div style={{ fontSize: 13, color: t.text }}>{entry.kondomKommentar}</div>}
+            </div>
+          )}
+
+          {/* Nye ting */}
+          {entry.nyeTing && entry.nyeTingTekst && (
+            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 4 }}>✨ Nye ting prøvd</div>
+              <div style={{ fontSize: 14, color: t.text }}>{entry.nyeTingTekst}</div>
+            </div>
+          )}
+
+          {/* Aktivitetskommentar */}
+          {entry.aktivitetKommentar && (
+            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 4 }}>💬 Kommentar til aktiviteter</div>
+              <div style={{ fontSize: 14, color: t.text, lineHeight: 1.6 }}>{entry.aktivitetKommentar}</div>
+            </div>
+          )}
+
+          {/* Generell kommentar */}
+          {entry.kommentar && (
+            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>📝 Kommentar</div>
+              <div style={{ fontSize: 14, color: t.text, lineHeight: 1.6 }}>{entry.kommentar}</div>
+            </div>
+          )}
+        </>)}
       </div>
     </div>
   );
