@@ -31,7 +31,7 @@ const { useState, useEffect, useRef } = React;
 
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.18-03";
+const APP_VERSION = "2026.07.19-01";
 
 // ── Felles: Drag & drop-sorterbar liste ────────────────────────────────────────
 function DragSortList({ items, onReorder, onDelete, renderLabel, accentColor, t }) {
@@ -13663,6 +13663,7 @@ function FavorittvideoApp({ t, onBack }) {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("dato");
   const [visning, setVisning] = useState("kategorier");
+  const [hovedTab, setHovedTab] = useState("videoer");
 
   useEffect(() => {
     setVideoer(loadFavorittvideoer());
@@ -13746,16 +13747,41 @@ function FavorittvideoApp({ t, onBack }) {
     <div style={{ background: t.bg, minHeight: "100vh", color: t.text, paddingBottom: 80 }}>
       <div style={{ padding: "20px 20px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <button onClick={onBack} style={{ background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 10, padding: "8px 14px", color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>← Tilbake</button>
-        <span style={{ fontSize: 17, fontWeight: 800, color: t.pink }}>🎬 Favorittvideoer</span>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setShowSettings(true)}
-            style={{ background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 10, padding: "8px 12px", color: t.textMuted, fontSize: 13, cursor: "pointer" }}>⚙️</button>
-          <button onClick={() => { setEditVideo(null); setShowModal(true); }}
-            style={{ background: t.pink, border: "none", borderRadius: 10, padding: "8px 14px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Ny</button>
+        <span style={{ fontSize: 17, fontWeight: 800, color: t.pink }}>🎬 Videoer</span>
+        {hovedTab === "videoer" ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setShowSettings(true)}
+              style={{ background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 10, padding: "8px 12px", color: t.textMuted, fontSize: 13, cursor: "pointer" }}>⚙️</button>
+            <button onClick={() => { setEditVideo(null); setShowModal(true); }}
+              style={{ background: t.pink, border: "none", borderRadius: 10, padding: "8px 14px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Ny</button>
+          </div>
+        ) : <div style={{ width: 70 }} />}
+      </div>
+
+      {/* Hoved-tabs: Videoer / Tutorials */}
+      <div style={{ padding: "12px 20px 0" }}>
+        <div style={{ display: "flex", background: t.surface, borderRadius: 12, padding: 4, marginBottom: 16 }}>
+          <button onClick={() => setHovedTab("videoer")}
+            style={{ flex: 1, padding: "10px", borderRadius: 9, border: "none",
+              background: hovedTab === "videoer" ? t.pink : "transparent",
+              color: hovedTab === "videoer" ? "#fff" : t.textMuted,
+              fontWeight: 700, fontSize: 14, cursor: "pointer" }}>🎬 Videoer</button>
+          <button onClick={() => setHovedTab("tutorials")}
+            style={{ flex: 1, padding: "10px", borderRadius: 9, border: "none",
+              background: hovedTab === "tutorials" ? t.blue : "transparent",
+              color: hovedTab === "tutorials" ? "#fff" : t.textMuted,
+              fontWeight: 700, fontSize: 14, cursor: "pointer" }}>🎓 Tutorials</button>
         </div>
       </div>
 
-      <div style={{ padding: "14px 20px 0" }}>
+      {hovedTab === "tutorials" && (
+        <div style={{ padding: "0 20px" }}>
+          <TutorialsTab t={t} />
+        </div>
+      )}
+
+      {hovedTab === "videoer" && (
+      <div style={{ padding: "0 20px" }}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Søk i beskrivelser..."
           style={{ width: "100%", background: t.surface, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 14px", color: t.text, fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
 
@@ -13814,6 +13840,8 @@ function FavorittvideoApp({ t, onBack }) {
         ))}
       </div>
 
+      )}
+
       {showModal && (
         <FvModal entry={editVideo} onSave={handleSave} onClose={() => { setShowModal(false); setEditVideo(null); }} t={t} kategorier={settings.kategorier} />
       )}
@@ -13823,7 +13851,269 @@ function FavorittvideoApp({ t, onBack }) {
     </div>
   );
 }
-// ── Hemmelig: Coming Soon sub-app placeholder ──────────────────────────────────
+// ── Hemmelig: Tutorials ────────────────────────────────────────────────────────
+// Storage: hemmelig:tutorials, hemmelig:tutorials:settings
+
+function loadTutorials() {
+  try { const r = localStorage.getItem("hemmelig:tutorials"); return r ? JSON.parse(r) : []; } catch(_) { return []; }
+}
+function saveTutorials(data) {
+  try { localStorage.setItem("hemmelig:tutorials", JSON.stringify(data)); } catch(_) {}
+}
+
+const TUT_DEFAULT_KATEGORIER = ["Teknikk", "Helse & sikkerhet", "Kommunikasjon", "BDSM / Fetish", "Annet"];
+
+function loadTutSettings() {
+  try { const r = localStorage.getItem("hemmelig:tutorials:settings"); return r ? JSON.parse(r) : { kategorier: TUT_DEFAULT_KATEGORIER }; } catch(_) { return { kategorier: TUT_DEFAULT_KATEGORIER }; }
+}
+function saveTutSettings(data) {
+  try { localStorage.setItem("hemmelig:tutorials:settings", JSON.stringify(data)); } catch(_) {}
+}
+
+function TutModal({ entry, onSave, onClose, t, kategorier }) {
+  const [url, setUrl] = useState(entry ? entry.url : "");
+  const [beskrivelse, setBeskrivelse] = useState(entry ? entry.beskrivelse : "");
+  const [valgtKats, setValgtKats] = useState(entry ? (entry.kategorier || []) : []);
+
+  function toggleKat(k) {
+    setValgtKats(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]);
+  }
+
+  const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
+  const lblSt = { fontSize: 13, fontWeight: 700, color: t.textMuted, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 };
+
+  function handleSave() {
+    if (!beskrivelse.trim()) return;
+    onSave({ id: entry ? entry.id : "tut" + Date.now(), url: url.trim(), beskrivelse: beskrivelse.trim(), kategorier: valgtKats, createdAt: entry ? entry.createdAt : Date.now() });
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>{entry ? "Rediger tutorial" : "Ny tutorial"}</div>
+
+        <div style={{ marginBottom: 14 }}>
+          <span style={lblSt}>Beskrivelse *</span>
+          <textarea value={beskrivelse} onChange={e => setBeskrivelse(e.target.value)}
+            placeholder="Hva handler denne tutorialen om?" rows={3}
+            style={{ ...inputSt, resize: "none", lineHeight: 1.5 }} />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <span style={lblSt}>URL (valgfritt)</span>
+          <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://..." style={inputSt} />
+          {url && <div style={{ fontSize: 12, color: t.purple, marginTop: 4 }}>🔗 {fvDomain(url)}</div>}
+        </div>
+
+        <div style={{ marginBottom: 24 }}>
+          <span style={lblSt}>Kategorier</span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {kategorier.map(k => (
+              <button key={k} onClick={() => toggleKat(k)}
+                style={{ padding: "8px 14px", borderRadius: 20,
+                  border: `2px solid ${valgtKats.includes(k) ? t.blue : t.border}`,
+                  background: valgtKats.includes(k) ? t.blue + "22" : t.bg,
+                  color: valgtKats.includes(k) ? t.blue : t.textMuted,
+                  fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                {k}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.bg, color: t.textMuted, fontWeight: 700, cursor: "pointer" }}>Avbryt</button>
+          <button onClick={handleSave} disabled={!beskrivelse.trim()}
+            style={{ flex: 2, padding: "14px", borderRadius: 12, border: "none", background: beskrivelse.trim() ? t.blue : t.border, color: "#fff", fontWeight: 700, fontSize: 15, cursor: beskrivelse.trim() ? "pointer" : "default" }}>Lagre</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TutKort({ item, t, onEdit, onDelete }) {
+  function aapne() { if (item.url) window.open(item.url, "_blank", "noopener,noreferrer"); }
+
+  return (
+    <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 10 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, lineHeight: 1.5, marginBottom: 8 }}>{item.beskrivelse}</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: item.url ? 10 : 0 }}>
+        {(item.kategorier || []).map(k => (
+          <span key={k} style={{ fontSize: 11, color: t.blue, background: t.blue + "18", padding: "2px 8px", borderRadius: 20 }}>{k}</span>
+        ))}
+      </div>
+      {item.url && <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 10 }}>🔗 {fvDomain(item.url)}</div>}
+      <div style={{ display: "flex", gap: 8 }}>
+        {item.url && (
+          <button onClick={aapne}
+            style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: t.blue, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+            ▶ Åpne
+          </button>
+        )}
+        <button onClick={onEdit}
+          style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.bg, color: t.textMuted, cursor: "pointer" }}>✏️</button>
+        <button onClick={onDelete}
+          style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.bg, color: "#ef4444", cursor: "pointer" }}>×</button>
+      </div>
+    </div>
+  );
+}
+
+function TutKategoriGruppe({ navn, items, t, onEdit, onDelete }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <button onClick={() => setOpen(!open)}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: t.surface, border: `1px solid ${t.border}`, borderRadius: open ? "12px 12px 0 0" : 12,
+          padding: "12px 16px", cursor: "pointer" }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: t.blue }}>{navn}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, color: t.textMuted, background: t.bg, padding: "2px 8px", borderRadius: 20 }}>{items.length}</span>
+          <span style={{ fontSize: 14, color: t.textMuted }}>{open ? "▲" : "▼"}</span>
+        </div>
+      </button>
+      {open && (
+        <div style={{ border: `1px solid ${t.border}`, borderTop: "none", borderRadius: "0 0 12px 12px", padding: "10px 10px 2px" }}>
+          {items.map(item => (
+            <TutKort key={item.id} item={item} t={t} onEdit={() => onEdit(item)} onDelete={() => onDelete(item.id)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TutSettingsModal({ settings, onSave, onClose, t }) {
+  const [kategorier, setKategorier] = useState([...settings.kategorier]);
+  const [nyKat, setNyKat] = useState("");
+
+  function leggTil() {
+    const v = nyKat.trim();
+    if (!v || kategorier.includes(v)) return;
+    setKategorier([...kategorier, v]);
+    setNyKat("");
+  }
+
+  const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", flex: 1, boxSizing: "border-box" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 4 }}>⚙️ Kategorier</div>
+        <div style={{ fontSize: 13, color: t.textFaint, marginBottom: 16 }}>Dra i ⠿ for å endre rekkefølge.</div>
+        <DragSortList items={kategorier} onReorder={setKategorier}
+          onDelete={idx => setKategorier(kategorier.filter((_, i) => i !== idx))}
+          accentColor={t.blue} t={t} />
+        <div style={{ display: "flex", gap: 8, marginBottom: 24, marginTop: 8 }}>
+          <input value={nyKat} onChange={e => setNyKat(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && leggTil()}
+            placeholder="Ny kategori..." style={inputSt} />
+          <button onClick={leggTil}
+            style={{ padding: "10px 16px", borderRadius: 10, border: "none", background: t.blue, color: "#fff", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>+ Legg til</button>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.bg, color: t.textMuted, fontWeight: 700, cursor: "pointer" }}>Avbryt</button>
+          <button onClick={() => onSave({ ...settings, kategorier })} style={{ flex: 2, padding: "14px", borderRadius: 12, border: "none", background: t.blue, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Lagre</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TutorialsTab({ t }) {
+  const [items, setItems] = useState([]);
+  const [settings, setSettings] = useState({ kategorier: TUT_DEFAULT_KATEGORIER });
+  const [showModal, setShowModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [search, setSearch] = useState("");
+  const [visning, setVisning] = useState("kategorier");
+
+  useEffect(() => {
+    setItems(loadTutorials());
+    setSettings(loadTutSettings());
+  }, []);
+
+  function handleSave(item) {
+    const updated = items.find(x => x.id === item.id)
+      ? items.map(x => x.id === item.id ? item : x)
+      : [item, ...items];
+    setItems(updated); saveTutorials(updated);
+    setShowModal(false); setEditItem(null);
+  }
+  function handleDelete(id) {
+    const updated = items.filter(x => x.id !== id);
+    setItems(updated); saveTutorials(updated);
+  }
+
+  const filtered = items.filter(x => !search ||
+    x.beskrivelse.toLowerCase().includes(search.toLowerCase()));
+  const sorted = [...filtered].sort((a, b) => b.createdAt - a.createdAt);
+
+  const gruppert = (() => {
+    const grupper = [];
+    settings.kategorier.forEach(k => {
+      const its = sorted.filter(x => (x.kategorier || []).includes(k));
+      if (its.length > 0) grupper.push({ navn: k, items: its });
+    });
+    const ukat = sorted.filter(x => !x.kategorier || x.kategorier.length === 0 ||
+      !x.kategorier.some(k => settings.kategorier.includes(k)));
+    if (ukat.length > 0) grupper.push({ navn: "Ukategorisert", items: ukat });
+    return grupper;
+  })();
+
+  const tabSt = active => ({
+    flex: 1, padding: "9px", borderRadius: 9, border: "none",
+    background: active ? t.blue : "transparent",
+    color: active ? "#fff" : t.textMuted,
+    fontWeight: 700, fontSize: 13, cursor: "pointer"
+  });
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Søk..."
+          style={{ flex: 1, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 14px", color: t.text, fontSize: 14, outline: "none", marginRight: 10 }} />
+        <button onClick={() => setShowSettings(true)}
+          style={{ background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 12px", color: t.textMuted, fontSize: 13, cursor: "pointer", marginRight: 8 }}>⚙️</button>
+        <button onClick={() => { setEditItem(null); setShowModal(true); }}
+          style={{ background: t.blue, border: "none", borderRadius: 10, padding: "9px 14px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>+ Ny</button>
+      </div>
+
+      <div style={{ display: "flex", background: t.surface, borderRadius: 12, padding: 4, marginBottom: 14 }}>
+        <button style={tabSt(visning === "kategorier")} onClick={() => setVisning("kategorier")}>🗂 Kategorier</button>
+        <button style={tabSt(visning === "liste")} onClick={() => setVisning("liste")}>📋 Liste</button>
+      </div>
+
+      {items.length === 0 && (
+        <div style={{ textAlign: "center", color: t.textMuted, padding: 40 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🎓</div>
+          <div>Ingen tutorials lagt til ennå.</div>
+        </div>
+      )}
+
+      {visning === "liste" && sorted.map(item => (
+        <TutKort key={item.id} item={item} t={t}
+          onEdit={() => { setEditItem(item); setShowModal(true); }}
+          onDelete={() => { if(window.confirm("Slett denne tutorialen?")) handleDelete(item.id); }} />
+      ))}
+
+      {visning === "kategorier" && gruppert.map(g => (
+        <TutKategoriGruppe key={g.navn} navn={g.navn} items={g.items} t={t}
+          onEdit={item => { setEditItem(item); setShowModal(true); }}
+          onDelete={id => { if(window.confirm("Slett denne tutorialen?")) handleDelete(id); }} />
+      ))}
+
+      {showModal && (
+        <TutModal entry={editItem} onSave={handleSave} onClose={() => { setShowModal(false); setEditItem(null); }} t={t} kategorier={settings.kategorier} />
+      )}
+      {showSettings && (
+        <TutSettingsModal settings={settings} onSave={s => { setSettings(s); saveTutSettings(s); setShowSettings(false); }} onClose={() => setShowSettings(false)} t={t} />
+      )}
+    </div>
+  );
+}
 function HemmeligComingSoon({ name, icon, t, onBack }) {
   return (
     <div style={{ background: t.bg, minHeight: "100vh", color: t.text, display: "flex", flexDirection: "column" }}>
