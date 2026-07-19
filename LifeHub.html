@@ -31,7 +31,7 @@ const { useState, useEffect, useRef } = React;
 
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.19-02";
+const APP_VERSION = "2026.07.19-03";
 
 // ── Felles: Drag & drop-sorterbar liste ────────────────────────────────────────
 function DragSortList({ items, onReorder, onDelete, renderLabel, accentColor, t }) {
@@ -8675,6 +8675,112 @@ function OrgStatistikk({ logg, t }) {
 }
 
 // ── Detalj-visning ─────────────────────────────────────────────────────────────
+function OrgVideoKort({ videoId, videoUrl, t }) {
+  const [video, setVideo] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const scaleColors = ["","#ef4444","#f97316","#eab308","#22c55e","#c084fc"];
+
+  useEffect(() => {
+    try {
+      const videoer = JSON.parse(localStorage.getItem("hemmelig:favorittvideoer") || "[]");
+      if (videoId) {
+        setVideo(videoer.find(v => v.id === videoId) || null);
+      } else if (videoUrl) {
+        setVideo(videoer.find(v => v.url === videoUrl) || { url: videoUrl, beskrivelse: null, _ny: true });
+      }
+    } catch(_) {}
+  }, [videoId, videoUrl]);
+
+  if (!video && !videoUrl) return null;
+
+  const url = video?.url || videoUrl;
+  const domain = url ? (() => { try { return new URL(url).hostname.replace(/^www\./,""); } catch(_) { return url; } })() : "";
+  const snitt = video && video.helhet ? ((video.helhet + video.intensitet + video.tenner) / 3) : null;
+  const snittFarge = snitt >= 4.5 ? "#c084fc" : snitt >= 3.5 ? "#22c55e" : snitt >= 2.5 ? "#eab308" : "#f97316";
+  const erFavoritt = (video?.kategorier || []).includes("Favoritt");
+
+  function handleSaveEdit(oppdatert) {
+    try {
+      const videoer = JSON.parse(localStorage.getItem("hemmelig:favorittvideoer") || "[]");
+      const finnes = videoer.find(v => v.id === oppdatert.id);
+      const updated = finnes
+        ? videoer.map(v => v.id === oppdatert.id ? oppdatert : v)
+        : [oppdatert, ...videoer];
+      localStorage.setItem("hemmelig:favorittvideoer", JSON.stringify(updated));
+      setVideo(oppdatert);
+    } catch(_) {}
+    setShowEditModal(false);
+  }
+
+  const fvSettings = (() => { try { const r = localStorage.getItem("hemmelig:favorittvideoer:settings"); return r ? JSON.parse(r) : null; } catch(_) { return null; } })();
+  const kategoriGrupper = fvSettings?.kategorier || [];
+
+  return (
+    <>
+      <div style={{ background: t.surface, border: `2px solid ${erFavoritt ? "#f59e0b" : t.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>🎬 Video jeg kom til</div>
+            {video?.beskrivelse ? (
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, lineHeight: 1.5 }}>
+                {erFavoritt && <span style={{ color: "#f59e0b", marginRight: 5 }}>★</span>}
+                {video.beskrivelse}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic" }}>Ingen beskrivelse ennå</div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            {(video?._ny || !videoId) && (
+              <button onClick={() => setShowEditModal(true)}
+                style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.textMuted, fontSize: 12, cursor: "pointer" }}>✏️ Rediger</button>
+            )}
+            {url && (
+              <button onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+                style={{ padding: "5px 12px", borderRadius: 8, border: "none", background: t.pink, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>▶ Åpne</button>
+            )}
+          </div>
+        </div>
+
+        {video?.kategorier?.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            {video.kategorier.map(k => (
+              <span key={k} style={{ fontSize: 11, color: k === "Favoritt" ? "#f59e0b" : t.pink, background: k === "Favoritt" ? "#f59e0b22" : t.pinkDim, padding: "2px 8px", borderRadius: 20 }}>
+                {k === "Favoritt" ? "★ Favoritt" : k}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {domain && <span style={{ fontSize: 12, color: t.textFaint }}>🔗 {domain}</span>}
+          {video?.helhet && <>
+            <span style={{ fontSize: 12, color: scaleColors[video.helhet], fontWeight: 700 }}>⭐ {video.helhet}</span>
+            <span style={{ fontSize: 12, color: scaleColors[video.intensitet] }}>🔥 {video.intensitet}</span>
+            <span style={{ fontSize: 12, color: scaleColors[video.tenner] }}>💜 {video.tenner}</span>
+          </>}
+          {snitt && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: snittFarge, background: snittFarge + "22", padding: "2px 8px", borderRadius: 20 }}>{snitt.toFixed(1)}</span>
+          )}
+          {video?.komTil > 0 && (
+            <span style={{ fontSize: 12, color: "#a855f7", fontWeight: 700 }}>💦 Kom {video.komTil}× til denne</span>
+          )}
+        </div>
+      </div>
+
+      {showEditModal && (
+        <FvModal
+          entry={video?._ny ? null : video}
+          onSave={handleSaveEdit}
+          onClose={() => setShowEditModal(false)}
+          t={t}
+          kategorier={kategoriGrupper}
+        />
+      )}
+    </>
+  );
+}
+
 function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t }) {
   const mengdeEmoji = { "Ingenting": "💧", "Lite": "💦", "Medium": "💦💦", "Masse": "🌊" };
   const energiColor = { "Ga opp": "#ef4444", "Tungt": "#f97316", "Medium": "#eab308", "Lett": "#22c55e", "Alt for lett": "#3b82f6" };
@@ -8739,6 +8845,11 @@ function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t 
             <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14 }}>
               <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>Kommentar</div>
               <div style={{ fontSize: 14, color: t.text, lineHeight: 1.6 }}>{entry.kommentar}</div>
+            </div>
+          )}
+          {(entry.videoId || entry.videoUrl) && (
+            <div style={{ marginTop: 14 }}>
+              <OrgVideoKort videoId={entry.videoId} videoUrl={entry.videoUrl} t={t} />
             </div>
           )}
         </>) : (<>
@@ -8879,6 +8990,9 @@ function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t 
               <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>📝 Kommentar</div>
               <div style={{ fontSize: 14, color: t.text, lineHeight: 1.6 }}>{entry.kommentar}</div>
             </div>
+          )}
+          {(entry.videoId || entry.videoUrl) && (
+            <OrgVideoKort videoId={entry.videoId} videoUrl={entry.videoUrl} t={t} />
           )}
         </>)}
       </div>
