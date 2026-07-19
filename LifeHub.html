@@ -31,7 +31,7 @@ const { useState, useEffect, useRef } = React;
 
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.19-03";
+const APP_VERSION = "2026.07.19-04";
 
 // ── Felles: Drag & drop-sorterbar liste ────────────────────────────────────────
 function DragSortList({ items, onReorder, onDelete, renderLabel, accentColor, t }) {
@@ -13676,10 +13676,11 @@ function FvModal({ entry, onSave, onClose, t, kategorier }) {
 }
 
 function FvKort({ video, t, onEdit, onDelete }) {
-  const snitt = ((video.helhet + video.intensitet + video.tenner) / 3);
-  const snittStr = snitt.toFixed(1);
+  const harRating = video.helhet != null && video.intensitet != null && video.tenner != null;
+  const snitt = harRating ? ((video.helhet + video.intensitet + video.tenner) / 3) : null;
+  const snittStr = snitt != null ? snitt.toFixed(1) : "–";
   const scaleColors = ["","#ef4444","#f97316","#eab308","#22c55e","#c084fc"];
-  const snittFarge = snitt >= 4.5 ? "#c084fc" : snitt >= 3.5 ? "#22c55e" : snitt >= 2.5 ? "#eab308" : "#f97316";
+  const snittFarge = snitt == null ? t.border : snitt >= 4.5 ? "#c084fc" : snitt >= 3.5 ? "#22c55e" : snitt >= 2.5 ? "#eab308" : "#f97316";
   const erFavoritt = (video.kategorier || []).includes("Favoritt");
 
   function aapne() { window.open(video.url, "_blank", "noopener,noreferrer"); }
@@ -13690,13 +13691,15 @@ function FvKort({ video, t, onEdit, onDelete }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: t.text, lineHeight: 1.5, flex: 1 }}>
             {erFavoritt && <span style={{ color: "#f59e0b", marginRight: 5 }}>★</span>}
-            {video.beskrivelse}
+            {video.beskrivelse || <span style={{ color: t.textFaint, fontStyle: "italic" }}>Ingen beskrivelse</span>}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0,
-            background: snittFarge + "22", border: `2px solid ${snittFarge}`, borderRadius: 10, padding: "4px 10px", minWidth: 44 }}>
-            <span style={{ fontSize: 18, fontWeight: 900, color: snittFarge, lineHeight: 1 }}>{snittStr}</span>
-            <span style={{ fontSize: 9, color: snittFarge, fontWeight: 700, letterSpacing: 0.5 }}>SCORE</span>
-          </div>
+          {harRating && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0,
+              background: snittFarge + "22", border: `2px solid ${snittFarge}`, borderRadius: 10, padding: "4px 10px", minWidth: 44 }}>
+              <span style={{ fontSize: 18, fontWeight: 900, color: snittFarge, lineHeight: 1 }}>{snittStr}</span>
+              <span style={{ fontSize: 9, color: snittFarge, fontWeight: 700, letterSpacing: 0.5 }}>SCORE</span>
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
           {(video.kategorier || []).map(k => (
@@ -13707,9 +13710,11 @@ function FvKort({ video, t, onEdit, onDelete }) {
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <span style={{ fontSize: 12, color: t.textFaint }}>🔗 {fvDomain(video.url)}</span>
-          <span style={{ fontSize: 12, color: scaleColors[video.helhet], fontWeight: 700 }}>⭐ {video.helhet}</span>
-          <span style={{ fontSize: 12, color: scaleColors[video.intensitet] }}>🔥 {video.intensitet}</span>
-          <span style={{ fontSize: 12, color: scaleColors[video.tenner] }}>💜 {video.tenner}</span>
+          {harRating && <>
+            <span style={{ fontSize: 12, color: scaleColors[video.helhet], fontWeight: 700 }}>⭐ {video.helhet}</span>
+            <span style={{ fontSize: 12, color: scaleColors[video.intensitet] }}>🔥 {video.intensitet}</span>
+            <span style={{ fontSize: 12, color: scaleColors[video.tenner] }}>💜 {video.tenner}</span>
+          </>}
           {video.komTil > 0 && (
             <span style={{ fontSize: 12, color: "#a855f7", fontWeight: 700 }}>💦 {video.komTil}×</span>
           )}
@@ -13944,23 +13949,26 @@ function FavorittvideoApp({ t, onBack }) {
     window.open(tilfeldig.url, "_blank", "noopener,noreferrer");
   }
   const erFavoritt = v => (v.kategorier || []).includes("Favoritt");
+  const snittScore = v => v.helhet != null && v.intensitet != null && v.tenner != null
+    ? (v.helhet + v.intensitet + v.tenner) / 3
+    : -1;
   const scoreSort = ["snitt","helhet","intensitet","tenner","komtil"].includes(sort);
 
   const filtered = videoer.filter(v => !search ||
-    v.beskrivelse.toLowerCase().includes(search.toLowerCase()) ||
-    fvDomain(v.url).toLowerCase().includes(search.toLowerCase()));
+    (v.beskrivelse || "").toLowerCase().includes(search.toLowerCase()) ||
+    fvDomain(v.url || "").toLowerCase().includes(search.toLowerCase()));
 
   const sorted = [...filtered].sort((a, b) => {
     if (scoreSort) {
       const aFav = erFavoritt(a), bFav = erFavoritt(b);
       if (aFav !== bFav) return bFav ? 1 : -1;
     }
-    if (sort === "helhet") return b.helhet - a.helhet;
-    if (sort === "intensitet") return b.intensitet - a.intensitet;
-    if (sort === "tenner") return b.tenner - a.tenner;
+    if (sort === "helhet") return (b.helhet||0) - (a.helhet||0);
+    if (sort === "intensitet") return (b.intensitet||0) - (a.intensitet||0);
+    if (sort === "tenner") return (b.tenner||0) - (a.tenner||0);
     if (sort === "snitt") return snittScore(b) - snittScore(a);
     if (sort === "komtil") return (b.komTil||0) - (a.komTil||0);
-    return b.createdAt - a.createdAt;
+    return (b.createdAt||0) - (a.createdAt||0);
   });
 
   // Build grouped view: for each gruppe, for each kat in that gruppe, collect matching videos
