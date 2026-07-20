@@ -31,7 +31,7 @@ const { useState, useEffect, useRef } = React;
 
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.19-04";
+const APP_VERSION = "2026.07.20-01";
 
 // ── Felles: Drag & drop-sorterbar liste ────────────────────────────────────────
 function DragSortList({ items, onReorder, onDelete, renderLabel, accentColor, t }) {
@@ -2558,6 +2558,13 @@ function daysUntilRelease(game) {
   return Math.ceil((d - now) / (1000*60*60*24));
 }
 
+function hoursUntilRelease(game) {
+  const d = parseReleaseDate(game);
+  if (!d) return null;
+  const now = new Date();
+  return (d - now) / (1000*60*60);
+}
+
 // ── Extracted components (MUST be outside GamingApp to avoid remount on every render) ──
 
 function GamingScoreInput({ scores, onChange, settings, nostalgi, t }) {
@@ -2873,12 +2880,27 @@ function GamingApp({ t, onBack }) {
               <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12 }}>{nextRelease.platform && nextRelease.platform + " · "}{formatReleaseDate(nextRelease)}</div>
               {(() => {
                 const d = daysUntilRelease(nextRelease);
-                return d === 0 ? <div style={{ fontSize: 28, fontWeight: 900, color: t.orange }}>I DAG! 🎉</div>
-                  : d === 1 ? <div style={{ fontSize: 28, fontWeight: 900, color: t.orange }}>I MORGEN!</div>
-                  : <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                      <span style={{ fontSize: 48, fontWeight: 900, color: blue, lineHeight: 1 }}>{d}</span>
-                      <span style={{ fontSize: 16, color: t.textMuted }}>dager igjen</span>
-                    </div>;
+                const h = hoursUntilRelease(nextRelease);
+                if (d === 0) return <div style={{ fontSize: 28, fontWeight: 900, color: t.orange }}>I DAG! 🎉</div>;
+                if (h !== null && h <= 24) {
+                  const timer = Math.ceil(h);
+                  return (
+                    <div>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontSize: 48, fontWeight: 900, color: t.orange, lineHeight: 1 }}>{timer}</span>
+                        <span style={{ fontSize: 16, color: t.textMuted }}>timer igjen</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: t.textMuted }}>Slippes ved midnatt i natt 🕛</div>
+                    </div>
+                  );
+                }
+                if (d === 1) return <div style={{ fontSize: 28, fontWeight: 900, color: t.orange }}>I MORGEN!</div>;
+                return (
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                    <span style={{ fontSize: 48, fontWeight: 900, color: blue, lineHeight: 1 }}>{d}</span>
+                    <span style={{ fontSize: 16, color: t.textMuted }}>dager igjen</span>
+                  </div>
+                );
               })()}
             </div>
           ) : (
