@@ -18,6 +18,20 @@
     #root{min-height:100vh;min-height:100svh;}
     input,select,textarea,button{font-family:inherit;}
     ::-webkit-scrollbar{display:none;}
+    button{position:relative;overflow:hidden;}
+    .lh-btn{position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent;}
+    .lh-ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,0.22);transform:scale(0);pointer-events:none;animation:lh-ripple-anim 0.48s ease-out forwards;}
+    @keyframes lh-ripple-anim{to{transform:scale(4);opacity:0;}}
+    .lh-fade-in{animation:lh-fade 0.22s ease-out both;}
+    @keyframes lh-fade{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:translateY(0);}}
+    .lh-slide-in{animation:lh-slide 0.25s cubic-bezier(0.22,1,0.36,1) both;}
+    @keyframes lh-slide{from{opacity:0;transform:translateX(30px);}to{opacity:1;transform:translateX(0);}}
+    .lh-slide-back{animation:lh-slide-b 0.23s cubic-bezier(0.22,1,0.36,1) both;}
+    @keyframes lh-slide-b{from{opacity:0;transform:translateX(-22px);}to{opacity:1;transform:translateX(0);}}
+    .lh-modal-in{animation:lh-modal 0.22s cubic-bezier(0.22,1,0.36,1) both;}
+    @keyframes lh-modal{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
+    .lh-overlay-bg{animation:lh-obg 0.18s ease both;}
+    @keyframes lh-obg{from{opacity:0;}to{opacity:1;}}
   </style>
 </head>
 <body>
@@ -26,12 +40,57 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 
+// ── Ripple hook — brukes på alle knapper ───────────────────────────────────────
+function useRipple() {
+  const ref = useRef(null);
+  const addRipple = useCallback((e) => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height) * 1.4;
+    const x = (e.clientX || e.touches?.[0]?.clientX || rect.left + rect.width / 2) - rect.left - size / 2;
+    const y = (e.clientY || e.touches?.[0]?.clientY || rect.top + rect.height / 2) - rect.top - size / 2;
+    const span = document.createElement("span");
+    span.className = "lh-ripple";
+    span.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px;`;
+    el.appendChild(span);
+    span.addEventListener("animationend", () => span.remove(), { once: true });
+  }, []);
+  return [ref, addRipple];
+}
 
+// ── Btn — knapp med ripple, drop-in for <button> ──────────────────────────────
+function Btn({ onClick, children, style, disabled, className, type }) {
+  const [ref, addRipple] = useRipple();
+  function handle(e) {
+    if (disabled) return;
+    addRipple(e);
+    onClick && onClick(e);
+  }
+  return (
+    <button
+      ref={ref}
+      type={type}
+      disabled={disabled}
+      className={"lh-btn" + (className ? " " + className : "")}
+      style={style}
+      onPointerDown={addRipple}
+      onClick={handle}
+    >{children}</button>
+  );
+}
+
+// ── useFadeIn — returnerer klasse som trigger fade-in ved mount ────────────────
+function useFadeIn() {
+  const [cls, setCls] = useState("");
+  useEffect(() => { setCls("lh-fade-in"); }, []);
+  return cls;
+}
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.21-03";
+const APP_VERSION = "2026.07.22-03";
 
 // ── Felles: Drag & drop-sorterbar liste ────────────────────────────────────────
 function DragSortList({ items, onReorder, onDelete, renderLabel, accentColor, t }) {
@@ -346,7 +405,7 @@ function HusoppgaverApp({ t, onBack }) {
       </div>
 
       {addMode && (
-        <div style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
+        <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
           <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 24, width: "100%", maxWidth: 380 }}>
             <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 18, color: t.text }}>Ny oppgave</div>
             <div style={{ marginBottom: 12 }}>
@@ -378,7 +437,7 @@ function HusoppgaverApp({ t, onBack }) {
       )}
 
       {editTask && (
-        <div style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
+        <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
           <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 24, width: "100%", maxWidth: 380 }}>
             <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 18, color: t.text }}>Rediger oppgave</div>
             <div style={{ marginBottom: 12 }}>
@@ -829,7 +888,7 @@ function JobbApp({ t, onBack }) {
 
       {/* Add project modal */}
       {addProjectMode && (
-        <div style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
+        <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
           <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 24, width: "100%", maxWidth: 360 }}>
             <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 16, color: t.text }}>Nytt prosjekt</div>
             <input value={newProjectName} onChange={e => setNewProjectName(e.target.value)}
@@ -1729,7 +1788,7 @@ function ØkonomiApp({ t, onBack }) {
 
       {/* Lønn edit modal */}
       {showLønnEdit && (
-        <div style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
+        <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
           <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 24, width: "100%", maxWidth: 340 }}>
             <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 16, color: t.text }}>Månedslønn</div>
             <label style={{ fontSize: 12, color: t.textMuted, display: "block", marginBottom: 6 }}>Netto månedslønn (kr)</label>
@@ -1755,135 +1814,347 @@ function ØkonomiApp({ t, onBack }) {
 // User-overridable per Pokémon. Base data is hardcoded from spreadsheet.
 
 const SHINY_BASE = [
-  [1,"Bulbasaur",1,true,"GO"],[2,"Ivysaur",1,true,"GO"],[3,"Venusaur",1,true,"GO"],[4,"Charmander",1,true,"HOME"],[5,"Charmeleon",1,true,"HOME"],[6,"Charizard",1,true,"HOME"],[7,"Squirtle",1,true,"HOME"],[8,"Wartortle",1,true,"GO"],
-  [9,"Blastoise",1,true,"HOME"],[10,"Caterpie",1,true,"HOME"],[11,"Metapod",1,true,"GO"],[12,"Butterfree",1,true,"HOME"],[13,"Weedle",1,true,"GO"],[14,"Kakuna",1,false,null],[15,"Beedrill",1,true,"GO"],[16,"Pidgey",1,true,"GO"],
-  [17,"Pidgeotto",1,true,"GO"],[18,"Pidgeot",1,true,"GO"],[19,"Rattata",1,true,"GO"],[20,"Raticate",1,true,"GO"],[21,"Spearow",1,false,null],[22,"Fearow",1,false,null],[23,"Ekans",1,true,"GO"],[24,"Arbok",1,false,null],
-  [25,"Pikachu",1,true,"GO"],[26,"Raichu",1,true,"GO"],[27,"Sandshrew",1,true,"GO"],[28,"Sandslash",1,true,"HOME"],[29,"Nidoran♀",1,true,"GO"],[30,"Nidorina",1,false,null],[31,"Nidoqueen",1,false,null],[32,"Nidoran♂",1,true,"GO"],
-  [33,"Nidorino",1,true,"GO"],[34,"Nidoking",1,true,"GO"],[35,"Clefairy",1,true,"HOME"],[36,"Clefable",1,false,null],[37,"Vulpix",1,true,"GO"],[38,"Ninetales",1,true,"GO"],[39,"Jigglypuff",1,true,"GO"],[40,"Wigglytuff",1,true,"GO"],
-  [41,"Zubat",1,false,null],[42,"Golbat",1,false,null],[43,"Oddish",1,true,"GO"],[44,"Gloom",1,true,"GO"],[45,"Vileplume",1,false,null],[46,"Paras",1,false,null],[47,"Parasect",1,false,null],[48,"Venonat",1,true,"HOME"],
-  [49,"Venomoth",1,false,null],[50,"Diglett",1,true,"GO"],[51,"Dugtrio",1,false,null],[52,"Meowth",1,true,"HOME"],[53,"Persian",1,true,"GO"],[54,"Psyduck",1,true,"HOME"],[55,"Golduck",1,false,null],[56,"Mankey",1,true,"GO"],
-  [57,"Primeape",1,true,"GO"],[58,"Growlithe",1,true,"GO"],[59,"Arcanine",1,true,"HOME"],[60,"Poliwag",1,true,"GO"],[61,"Poliwhirl",1,false,null],[62,"Poliwrath",1,false,null],[63,"Abra",1,true,"GO"],[64,"Kadabra",1,true,"GO"],
-  [65,"Alakazam",1,true,"GO"],[66,"Machop",1,true,"HOME"],[67,"Machoke",1,true,"GO"],[68,"Machamp",1,true,"GO"],[69,"Bellsprout",1,true,"GO"],[70,"Weepinbell",1,false,null],[71,"Victreebel",1,false,null],[72,"Tentacool",1,true,"HOME"],
-  [73,"Tentacruel",1,false,null],[74,"Geodude",1,true,"HOME"],[75,"Graveler",1,true,"GO"],[76,"Golem",1,true,"HOME"],[77,"Ponyta",1,true,"HOME"],[78,"Rapidash",1,true,"GO"],[79,"Slowpoke",1,true,"GO"],[80,"Slowbro",1,true,"GO"],
-  [81,"Magnemite",1,false,null],[82,"Magneton",1,false,null],[83,"Farfetch'd",1,true,"GO"],[84,"Doduo",1,true,"HOME"],[85,"Dodrio",1,false,null],[86,"Seel",1,false,null],[87,"Dewgong",1,false,null],[88,"Grimer",1,true,"GO"],
-  [89,"Muk",1,true,"GO"],[90,"Shellder",1,true,"GO"],[91,"Cloyster",1,true,"GO"],[92,"Gastly",1,true,"GO"],[93,"Haunter",1,true,"GO"],[94,"Gengar",1,true,"HOME"],[95,"Onix",1,true,"GO"],[96,"Drowzee",1,false,null],
-  [97,"Hypno",1,true,"HOME"],[98,"Krabby",1,false,null],[99,"Kingler",1,false,null],[100,"Voltorb",1,true,"GO"],[101,"Electrode",1,false,null],[102,"Exeggcute",1,true,"HOME"],[103,"Exeggutor",1,true,"HOME"],[104,"Cubone",1,true,"HOME"],
-  [105,"Marowak",1,false,null],[106,"Hitmonlee",1,true,"GO"],[107,"Hitmonchan",1,true,"GO"],[108,"Lickitung",1,true,"GO"],[109,"Koffing",1,true,"GO"],[110,"Weezing",1,true,"GO"],[111,"Rhyhorn",1,true,"HOME"],[112,"Rhydon",1,true,"GO"],
-  [113,"Chansey",1,true,"HOME"],[114,"Tangela",1,true,"GO"],[115,"Kangaskhan",1,true,"GO"],[116,"Horsea",1,false,null],[117,"Seadra",1,true,"HOME"],[118,"Goldeen",1,true,"GO"],[119,"Seaking",1,false,null],[120,"Staryu",1,true,"GO"],
-  [121,"Starmie",1,true,"GO"],[122,"Mr. Mime",1,true,"GO"],[123,"Scyther",1,true,"GO"],[124,"Jynx",1,true,"HOME"],[125,"Electabuzz",1,true,"HOME"],[126,"Magmar",1,true,"HOME"],[127,"Pinsir",1,true,"HOME"],[128,"Tauros",1,false,null],
-  [129,"Magikarp",1,true,"HOME"],[130,"Gyarados",1,true,"HOME"],[131,"Lapras",1,true,"HOME"],[132,"Ditto",1,true,"HOME"],[133,"Eevee",1,true,"HOME"],[134,"Vaporeon",1,true,"HOME"],[135,"Jolteon",1,true,"HOME"],[136,"Flareon",1,false,null],
-  [137,"Porygon",1,true,"HOME"],[138,"Omanyte",1,true,"GO"],[139,"Omastar",1,true,"HOME"],[140,"Kabuto",1,true,"GO"],[141,"Kabutops",1,true,"HOME"],[142,"Aerodactyl",1,true,"HOME"],[143,"Snorlax",1,true,"GO"],[144,"Articuno",1,true,"GO"],
-  [145,"Zapdos",1,true,"GO"],[146,"Moltres",1,true,"GO"],[147,"Dratini",1,true,"HOME"],[148,"Dragonair",1,true,"GO"],[149,"Dragonite",1,true,"HOME"],[150,"Mewtwo",1,true,"HOME"],[151,"Mew",1,true,"HOME"],[152,"Chikorita",2,true,"GO"],
-  [153,"Bayleef",2,true,"GO"],[154,"Meganium",2,true,"GO"],[155,"Cyndaquil",2,true,"GO"],[156,"Quilava",2,true,"GO"],[157,"Typhlosion",2,true,"GO"],[158,"Totodile",2,false,null],[159,"Croconaw",2,false,null],[160,"Feraligatr",2,false,null],
-  [161,"Sentret",2,false,null],[162,"Furret",2,false,null],[163,"Hoothoot",2,true,"HOME"],[164,"Noctowl",2,false,null],[165,"Ledyba",2,true,"GO"],[166,"Ledian",2,false,null],[167,"Spinarak",2,false,null],[168,"Ariados",2,false,null],
-  [169,"Crobat",2,false,null],[170,"Chinchou",2,true,"HOME"],[171,"Lanturn",2,true,"HOME"],[172,"Pichu",2,false,null],[173,"Cleffa",2,false,null],[174,"Igglybuff",2,false,null],[175,"Togepi",2,true,"HOME"],[176,"Togetic",2,true,"GO"],
-  [177,"Natu",2,false,null],[178,"Xatu",2,false,null],[179,"Mareep",2,true,"GO"],[180,"Flaaffy",2,false,null],[181,"Ampharos",2,true,"GO"],[182,"Bellossom",2,false,null],[183,"Marill",2,true,"GO"],[184,"Azumarill",2,true,"GO"],
-  [185,"Sudowoodo",2,true,"GO"],[186,"Politoed",2,false,null],[187,"Hoppip",2,true,"GO"],[188,"Skiploom",2,false,null],[189,"Jumpluff",2,false,null],[190,"Aipom",2,true,"HOME"],[191,"Sunkern",2,false,null],[192,"Sunflora",2,false,null],
-  [193,"Yanma",2,true,"HOME"],[194,"Wooper",2,true,"HOME"],[195,"Quagsire",2,false,null],[196,"Espeon",2,true,"GO"],[197,"Umbreon",2,true,"GO"],[198,"Murkrow",2,true,"HOME"],[199,"Slowking",2,true,"GO"],[200,"Misdreavus",2,false,null],
-  [201,"Unown",2,true,"HOME"],[202,"Wobbuffet",2,true,"GO"],[203,"Girafarig",2,true,"GO"],[204,"Pineco",2,true,"GO"],[205,"Forretress",2,true,"HOME"],[206,"Dunsparce",2,true,"HOME"],[207,"Gligar",2,true,"GO"],[208,"Steelix",2,true,"GO"],
-  [209,"Snubbull",2,true,"GO"],[210,"Granbull",2,true,"GO"],[211,"Qwilfish",2,false,null],[212,"Scizor",2,true,"GO"],[213,"Shuckle",2,true,"GO"],[214,"Heracross",2,true,"HOME"],[215,"Sneasel",2,true,"GO"],[216,"Teddiursa",2,true,"GO"],
-  [217,"Ursaring",2,true,"GO"],[218,"Slugma",2,true,"HOME"],[219,"Magcargo",2,false,null],[220,"Swinub",2,true,"HOME"],[221,"Piloswine",2,true,"HOME"],[222,"Corsola",2,true,"HOME"],[223,"Remoraid",2,false,null],[224,"Octillery",2,false,null],
-  [225,"Delibird",2,true,"GO"],[226,"Mantine",2,true,"GO"],[227,"Skarmory",2,true,"GO"],[228,"Houndour",2,true,"GO"],[229,"Houndoom",2,true,"GO"],[230,"Kingdra",2,false,null],[231,"Phanpy",2,false,null],[232,"Donphan",2,false,null],
-  [233,"Porygon2",2,false,null],[234,"Stantler",2,false,null],[235,"Smeargle",2,true,"GO"],[236,"Tyrogue",2,false,null],[237,"Hitmontop",2,false,null],[238,"Smoochum",2,false,null],[239,"Elekid",2,true,"HOME"],[240,"Magby",2,false,null],
-  [241,"Miltank",2,true,"HOME"],[242,"Blissey",2,false,null],[243,"Raikou",2,false,null],[244,"Entei",2,false,null],[245,"Suicune",2,false,null],[246,"Larvitar",2,true,"GO"],[247,"Pupitar",2,true,"GO"],[248,"Tyranitar",2,true,"GO"],
-  [249,"Lugia",2,false,null],[250,"Ho-oh",2,false,null],[251,"Celebi",2,true,"GO"],[252,"Treecko",3,true,"GO"],[253,"Grovyle",3,false,null],[254,"Sceptile",3,false,null],[255,"Torchic",3,false,null],[256,"Combusken",3,false,null],
-  [257,"Blaziken",3,false,null],[258,"Mudkip",3,true,"GO"],[259,"Marshtomp",3,false,null],[260,"Swampert",3,true,"GO"],[261,"Poochyena",3,true,"GO"],[262,"Mightyena",3,true,"GO"],[263,"Zigzagoon",3,true,"GO"],[264,"Linoone",3,false,null],
-  [265,"Wurmple",3,false,null],[266,"Silcoon",3,false,null],[267,"Beautifly",3,false,null],[268,"Cascoon",3,false,null],[269,"Dustox",3,false,null],[270,"Lotad",3,true,"GO"],[271,"Lombre",3,false,null],[272,"Ludicolo",3,true,"GO"],
-  [273,"Seedot",3,true,"GO"],[274,"Nuzleaf",3,true,"GO"],[275,"Shiftry",3,true,"GO"],[276,"Taillow",3,false,null],[277,"Swellow",3,false,null],[278,"Wingull",3,true,"GO"],[279,"Pelipper",3,true,"GO"],[280,"Ralts",3,true,"GO"],
-  [281,"Kirlia",3,false,null],[282,"Gardevoir",3,true,"GO"],[283,"Surskit",3,false,null],[284,"Masquerain",3,false,null],[285,"Shroomish",3,false,null],[286,"Breloom",3,false,null],[287,"Slakoth",3,true,"GO"],[288,"Vigoroth",3,false,null],
-  [289,"Slaking",3,false,null],[290,"Nincada",3,false,null],[291,"Ninjask",3,false,null],[292,"Shedinja",3,false,null],[293,"Whismur",3,true,"GO"],[294,"Loudred",3,false,null],[295,"Exploud",3,false,null],[296,"Makuhita",3,true,"GO"],
-  [297,"Hariyama",3,true,"GO"],[298,"Azurill",3,false,null],[299,"Nosepass",3,true,"GO"],[300,"Skitty",3,false,null],[301,"Delcatty",3,false,null],[302,"Sableye",3,true,"GO"],[303,"Mawile",3,false,null],[304,"Aron",3,true,"GO"],
-  [305,"Lairon",3,false,null],[306,"Aggron",3,true,"GO"],[307,"Meditite",3,true,"HOME"],[308,"Medicham",3,true,"HOME"],[309,"Electrike",3,false,null],[310,"Manectric",3,false,null],[311,"Plusle",3,true,"HOME"],[312,"Minun",3,true,"HOME"],
-  [313,"Volbeat",3,false,null],[314,"Illumise",3,true,"GO"],[315,"Roselia",3,true,"GO"],[316,"Gulpin",3,true,"GO"],[317,"Swalot",3,true,"GO"],[318,"Carvanha",3,true,"GO"],[319,"Sharpedo",3,true,"GO"],[320,"Wailmer",3,true,"HOME"],
-  [321,"Wailord",3,true,"HOME"],[322,"Numel",3,true,"HOME"],[323,"Camerupt",3,false,null],[324,"Torkoal",3,true,"GO"],[325,"Spoink",3,true,"GO"],[326,"Grumpig",3,true,"GO"],[327,"Spinda",3,true,"HOME"],[328,"Trapinch",3,true,"GO"],
-  [329,"Vibrava",3,false,null],[330,"Flygon",3,true,"GO"],[331,"Cacnea",3,false,null],[332,"Cacturne",3,false,null],[333,"Swablu",3,true,"HOME"],[334,"Altaria",3,true,"HOME"],[335,"Zangoose",3,true,"HOME"],[336,"Seviper",3,false,null],
-  [337,"Lunatone",3,true,"GO"],[338,"Solrock",3,true,"GO"],[339,"Barboach",3,true,"GO"],[340,"Whiscash",3,false,null],[341,"Corphish",3,false,null],[342,"Crawdaunt",3,false,null],[343,"Baltoy",3,false,null],[344,"Claydol",3,false,null],
-  [345,"Lileep",3,false,null],[346,"Cradily",3,false,null],[347,"Anorith",3,false,null],[348,"Armaldo",3,false,null],[349,"Feebas",3,true,"HOME"],[350,"Milotic",3,false,null],[351,"Castform",3,true,"GO"],[352,"Kecleon",3,false,null],
-  [353,"Shuppet",3,false,null],[354,"Banette",3,false,null],[355,"Duskull",3,true,"GO"],[356,"Dusclops",3,true,"GO"],[357,"Tropius",3,true,"HOME"],[358,"Chimecho",3,true,"GO"],[359,"Absol",3,true,"GO"],[360,"Wynaut",3,false,null],
-  [361,"Snorunt",3,true,"HOME"],[362,"Glalie",3,true,"HOME"],[363,"Spheal",3,true,"GO"],[364,"Sealeo",3,false,null],[365,"Walrein",3,true,"GO"],[366,"Clamperl",3,true,"GO"],[367,"Huntail",3,true,"GO"],[368,"Gorebyss",3,true,"GO"],
-  [369,"Relicanth",3,false,null],[370,"Luvdisc",3,true,"GO"],[371,"Bagon",3,true,"GO"],[372,"Shelgon",3,false,null],[373,"Salamence",3,true,"GO"],[374,"Beldum",3,true,"HOME"],[375,"Metang",3,true,"HOME"],[376,"Metagross",3,true,"HOME"],
-  [377,"Regirock",3,true,"GO"],[378,"Regice",3,false,null],[379,"Registeel",3,true,"GO"],[380,"Latias",3,false,null],[381,"Latios",3,true,"GO"],[382,"Kyogre",3,true,"GO"],[383,"Groudon",3,true,"GO"],[384,"Rayquaza",3,true,"GO"],
-  [385,"Jirachi",3,false,null],[386,"Deoxys",3,true,"HOME"],[387,"Turtwig",4,true,"GO"],[388,"Grotle",4,true,"GO"],[389,"Torterra",4,true,"GO"],[390,"Chimchar",4,true,"GO"],[391,"Monferno",4,true,"GO"],[392,"Infernape",4,true,"GO"],
-  [393,"Piplup",4,true,"GO"],[394,"Prinplup",4,true,"GO"],[395,"Empoleon",4,true,"GO"],[396,"Starly",4,true,"GO"],[397,"Staravia",4,false,null],[398,"Staraptor",4,true,"GO"],[399,"Bidoof",4,true,"GO"],[400,"Bibarel",4,false,null],
-  [401,"Kricketot",4,true,"GO"],[402,"Kricketune",4,true,"GO"],[403,"Shinx",4,true,"begge"],[404,"Luxio",4,true,"GO"],[405,"Luxray",4,true,"GO"],[406,"Budew",4,false,null],[407,"Roserade",4,true,"GO"],[408,"Cranidos",4,true,"GO"],
-  [409,"Rampardos",4,true,"GO"],[410,"Shieldon",4,false,null],[411,"Bastiodon",4,false,null],[412,"Burmy",4,true,"GO"],[413,"Wormadam",4,true,"GO"],[414,"Mothim",4,false,null],[415,"Combee",4,true,"GO"],[416,"Vespiquen",4,false,null],
-  [417,"Pachirisu",4,true,"HOME"],[418,"Buizel",4,true,"GO"],[419,"Floatzel",4,false,null],[420,"Cherubi",4,false,null],[421,"Cherrim",4,false,null],[422,"Shellos",4,true,"GO"],[423,"Gastrodon",4,false,null],[424,"Ambipom",4,true,"GO"],
-  [425,"Drifloon",4,true,"HOME"],[426,"Drifblim",4,true,"HOME"],[427,"Buneary",4,false,null],[428,"Lopunny",4,false,null],[429,"Mismagius",4,false,null],[430,"Honchkrow",4,false,null],[431,"Glameow",4,false,null],[432,"Purugly",4,false,null],
-  [433,"Chingling",4,true,"HOME"],[434,"Stunky",4,true,"GO"],[435,"Skuntank",4,false,null],[436,"Bronzor",4,true,"GO"],[437,"Bronzong",4,true,"GO"],[438,"Bonsly",4,false,null],[439,"Mime Jr.",4,false,null],[440,"Happiny",4,false,null],
-  [441,"Chatot",4,false,null],[442,"Spiritomb",4,false,null],[443,"Gible",4,true,"HOME"],[444,"Gabite",4,true,"HOME"],[445,"Garchomp",4,true,"HOME"],[446,"Munchlax",4,true,"GO"],[447,"Riolu",4,true,"GO"],[448,"Lucario",4,true,"HOME"],
-  [449,"Hippopotas",4,false,null],[450,"Hippowdon",4,true,"GO"],[451,"Skorupi",4,false,null],[452,"Drapion",4,true,"HOME"],[453,"Croagunk",4,true,"GO"],[454,"Toxicroak",4,false,null],[455,"Carnivine",4,false,null],[456,"Finneon",4,false,null],
-  [457,"Lumineon",4,true,"HOME"],[458,"Mantyke",4,false,null],[459,"Snover",4,false,null],[460,"Abomasnow",4,false,null],[461,"Weavile",4,true,"GO"],[462,"Magnezone",4,false,null],[463,"Lickilicky",4,true,"HOME"],[464,"Rhyperior",4,true,"GO"],
-  [465,"Tangrowth",4,true,"GO"],[466,"Electivire",4,true,"GO"],[467,"Magmortar",4,true,"GO"],[468,"Togekiss",4,true,"GO"],[469,"Yanmega",4,false,null],[470,"Leafeon",4,true,"GO"],[471,"Glaceon",4,false,null],[472,"Gliscor",4,true,"GO"],
-  [473,"Mamoswine",4,false,null],[474,"Porygon-Z",4,true,"GO"],[475,"Gallade",4,true,"GO"],[476,"Probopass",4,false,null],[477,"Dusknoir",4,true,"GO"],[478,"Froslass",4,false,null],[479,"Rotom",4,false,null],[480,"Uxie",4,false,null],
-  [481,"Mesprit",4,true,"GO"],[482,"Azelf",4,false,null],[483,"Dialga",4,false,null],[484,"Palkia",4,false,null],[485,"Heatran",4,false,null],[486,"Regigigas",4,false,null],[487,"Giratina",4,true,"GO"],[488,"Cresselia",4,false,null],
-  [489,"Phione",4,false,null],[490,"Manaphy",4,false,null],[491,"Darkrai",4,true,"GO"],[492,"Shaymin",4,true,"GO"],[493,"Arceus",4,true,"HOME"],[494,"Victini",5,false,null],[495,"Snivy",5,true,"GO"],[496,"Servine",5,true,"GO"],
-  [497,"Serperior",5,true,"GO"],[498,"Tepig",5,true,"GO"],[499,"Pignite",5,true,"GO"],[500,"Emboar",5,true,"GO"],[501,"Oshawott",5,true,"GO"],[502,"Dewott",5,true,"GO"],[503,"Samurott",5,true,"GO"],[504,"Patrat",5,false,null],
-  [505,"Watchog",5,false,null],[506,"Lillipup",5,false,null],[507,"Herdier",5,false,null],[508,"Stoutland",5,false,null],[509,"Purrloin",5,false,null],[510,"Liepard",5,false,null],[511,"Pansage",5,false,null],[512,"Simisage",5,false,null],
-  [513,"Pansear",5,true,"GO"],[514,"Simisear",5,false,null],[515,"Panpour",5,false,null],[516,"Simipour",5,false,null],[517,"Munna",5,false,null],[518,"Musharna",5,false,null],[519,"Pidove",5,false,null],[520,"Tranquill",5,false,null],
-  [521,"Unfezant",5,false,null],[522,"Blitzle",5,false,null],[523,"Zebstrika",5,true,"HOME"],[524,"Roggenrola",5,true,"GO"],[525,"Boldore",5,true,"GO"],[526,"Gigalith",5,true,"GO"],[527,"Woobat",5,true,"GO"],[528,"Swoobat",5,false,null],
-  [529,"Drilbur",5,true,"HOME"],[530,"Excadrill",5,false,null],[531,"Audino",5,false,null],[532,"Timburr",5,true,"GO"],[533,"Gurdurr",5,false,null],[534,"Conkeldurr",5,false,null],[535,"Tympole",5,true,"GO"],[536,"Palpitoad",5,false,null],
-  [537,"Seismitoad",5,true,"GO"],[538,"Throh",5,false,null],[539,"Sawk",5,false,null],[540,"Sewaddle",5,false,null],[541,"Swadloon",5,false,null],[542,"Leavanny",5,false,null],[543,"Venipede",5,false,null],[544,"Whirlipede",5,false,null],
-  [545,"Scolipede",5,false,null],[546,"Cottonee",5,true,"GO"],[547,"Whimsicott",5,false,null],[548,"Petilil",5,false,null],[549,"Lilligant",5,false,null],[550,"Basculin",5,true,"HOME"],[551,"Sandile",5,false,null],[552,"Krokorok",5,false,null],
-  [553,"Krookodile",5,false,null],[554,"Darumaka",5,false,null],[555,"Darmanitan",5,true,"HOME"],[556,"Maractus",5,false,null],[557,"Dwebble",5,true,"GO"],[558,"Crustle",5,false,null],[559,"Scraggy",5,false,null],[560,"Scrafty",5,false,null],
-  [561,"Sigilyph",5,false,null],[562,"Yamask",5,false,null],[563,"Cofagrigus",5,true,"GO"],[564,"Tirtouga",5,false,null],[565,"Carracosta",5,false,null],[566,"Archen",5,true,"GO"],[567,"Archeops",5,false,null],[568,"Trubbish",5,false,null],
-  [569,"Garbodor",5,false,null],[570,"Zorua",5,false,null],[571,"Zoroark",5,false,null],[572,"Minccino",5,true,"GO"],[573,"Cinccino",5,true,"GO"],[574,"Gothita",5,false,null],[575,"Gothorita",5,false,null],[576,"Gothitelle",5,false,null],
-  [577,"Solosis",5,false,null],[578,"Duosion",5,false,null],[579,"Reuniclus",5,false,null],[580,"Ducklett",5,true,"GO"],[581,"Swanna",5,false,null],[582,"Vanillite",5,true,"GO"],[583,"Vanillish",5,false,null],[584,"Vanilluxe",5,false,null],
-  [585,"Deerling",5,false,null],[586,"Sawsbuck",5,false,null],[587,"Emolga",5,true,"GO"],[588,"Karrablast",5,true,"GO"],[589,"Escavalier",5,false,null],[590,"Foongus",5,false,null],[591,"Amoonguss",5,true,"HOME"],[592,"Frillish",5,false,null],
-  [593,"Jellicent",5,false,null],[594,"Alomomola",5,true,"GO"],[595,"Joltik",5,false,null],[596,"Galvantula",5,false,null],[597,"Ferroseed",5,false,null],[598,"Ferrothorn",5,false,null],[599,"Klink",5,false,null],[600,"Klang",5,false,null],
-  [601,"Klinklang",5,false,null],[602,"Tynamo",5,false,null],[603,"Eelektrik",5,false,null],[604,"Eelektross",5,true,"GO"],[605,"Elgyem",5,true,"GO"],[606,"Beheeyem",5,false,null],[607,"Litwick",5,true,"GO"],[608,"Lampent",5,false,null],
-  [609,"Chandelure",5,false,null],[610,"Axew",5,true,"GO"],[611,"Fraxure",5,false,null],[612,"Haxorus",5,false,null],[613,"Cubchoo",5,true,"GO"],[614,"Beartic",5,false,null],[615,"Cryogonal",5,false,null],[616,"Shelmet",5,true,"GO"],
-  [617,"Accelgor",5,false,null],[618,"Stunfisk",5,true,"GO"],[619,"Mienfoo",5,false,null],[620,"Mienshao",5,false,null],[621,"Druddigon",5,false,null],[622,"Golett",5,false,null],[623,"Golurk",5,false,null],[624,"Pawniard",5,true,"GO"],
-  [625,"Bisharp",5,true,"GO"],[626,"Bouffalant",5,false,null],[627,"Rufflet",5,true,"GO"],[628,"Braviary",5,false,null],[629,"Vullaby",5,false,null],[630,"Mandibuzz",5,false,null],[631,"Heatmor",5,true,"GO"],[632,"Durant",5,false,null],
-  [633,"Deino",5,true,"GO"],[634,"Zweilous",5,true,"GO"],[635,"Hydreigon",5,false,null],[636,"Larvesta",5,true,"begge"],[637,"Volcarona",5,false,null],[638,"Cobalion",5,false,null],[639,"Terrakion",5,false,null],[640,"Virizion",5,false,null],
-  [641,"Tornadus",5,true,"HOME"],[642,"Thundurus",5,true,"HOME"],[643,"Reshiram",5,false,null],[644,"Zekrom",5,false,null],[645,"Landorus",5,true,"HOME"],[646,"Kyurem",5,false,null],[647,"Keldeo",5,false,null],[648,"Meloetta",5,false,null],
-  [649,"Genesect",5,true,"GO"],[650,"Chespin",6,true,"GO"],[651,"Quilladin",6,false,null],[652,"Chesnaught",6,false,null],[653,"Fennekin",6,true,"GO"],[654,"Braixen",6,false,null],[655,"Delphox",6,false,null],[656,"Froakie",6,true,"GO"],
-  [657,"Frogadier",6,true,"GO"],[658,"Greninja",6,true,"GO"],[659,"Bunnelby",6,false,null],[660,"Diggersby",6,false,null],[661,"Fletchling",6,true,"begge"],[662,"Fletchinder",6,true,"GO"],[663,"Talonflame",6,true,"GO"],[664,"Scatterbug",6,false,null],
-  [665,"Spewpa",6,false,null],[666,"Vivillon",6,false,null],[667,"Litleo",6,true,"GO"],[668,"Pyroar",6,false,null],[669,"Flabébé",6,false,null],[670,"Floette",6,false,null],[671,"Florges",6,true,"HOME"],[672,"Skiddo",6,true,"HOME"],
-  [673,"Gogoat",6,true,"HOME"],[674,"Pancham",6,false,null],[675,"Pangoro",6,false,null],[676,"Furfrou",6,false,null],[677,"Espurr",6,true,"GO"],[678,"Meowstic",6,true,"HOME"],[679,"Honedge",6,false,null],[680,"Doublade",6,false,null],
-  [681,"Aegislash",6,true,"HOME"],[682,"Spritzee",6,false,null],[683,"Aromatisse",6,false,null],[684,"Swirlix",6,true,"GO"],[685,"Slurpuff",6,false,null],[686,"Inkay",6,true,"GO"],[687,"Malamar",6,false,null],[688,"Binacle",6,true,"GO"],
-  [689,"Barbaracle",6,true,"GO"],[690,"Skrelp",6,false,null],[691,"Dragalge",6,false,null],[692,"Clauncher",6,true,"HOME"],[693,"Clawitzer",6,false,null],[694,"Helioptile",6,true,"GO"],[695,"Heliolisk",6,true,"GO"],[696,"Tyrunt",6,false,null],
-  [697,"Tyrantrum",6,false,null],[698,"Amaura",6,true,"GO"],[699,"Aurorus",6,false,null],[700,"Sylveon",6,true,"GO"],[701,"Hawlucha",6,true,"HOME"],[702,"Dedenne",6,true,"HOME"],[703,"Carbink",6,true,"HOME"],[704,"Goomy",6,true,"begge"],
-  [705,"Sliggoo",6,true,"GO"],[706,"Goodra",6,true,"GO"],[707,"Klefki",6,false,null],[708,"Phantump",6,true,"GO"],[709,"Trevenant",6,false,null],[710,"Pumpkaboo",6,true,"GO"],[711,"Gourgeist",6,true,"GO"],[712,"Bergmite",6,false,null],
-  [713,"Avalugg",6,true,"GO"],[714,"Noibat",6,true,"HOME"],[715,"Noivern",6,true,"HOME"],[716,"Xerneas",6,true,"HOME"],[717,"Yveltal",6,true,"HOME"],[718,"Zygarde",6,false,null],[719,"Diancie",6,false,null],[720,"Hoopa",6,true,"HOME"],
-  [721,"Volcanion",6,false,null],[722,"Rowlet",7,false,null],[723,"Dartrix",7,false,null],[724,"Decidueye",7,false,null],[725,"Litten",7,true,"GO"],[726,"Torracat",7,true,"begge"],[727,"Incineroar",7,true,"GO"],[728,"Popplio",7,false,null],
-  [729,"Brionne",7,false,null],[730,"Primarina",7,true,"GO"],[731,"Pikipek",7,true,"HOME"],[732,"Trumbeak",7,false,null],[733,"Toucannon",7,false,null],[734,"Yungoos",7,true,"HOME"],[735,"Gumshoos",7,false,null],[736,"Grubbin",7,true,"GO"],
-  [737,"Charjabug",7,true,"GO"],[738,"Vikavolt",7,true,"GO"],[739,"Crabrawler",7,false,null],[740,"Crabominable",7,true,"GO"],[741,"Oricorio",7,true,"HOME"],[742,"Cutiefly",7,false,null],[743,"Ribombee",7,false,null],[744,"Rockruff",7,true,"HOME"],
-  [745,"Lycanroc",7,true,"HOME"],[746,"Wishiwashi",7,true,"HOME"],[747,"Mareanie",7,false,null],[748,"Toxapex",7,true,"GO"],[749,"Mudbray",7,true,"HOME"],[750,"Mudsdale",7,false,null],[751,"Dewpider",7,true,"GO"],[752,"Araquanid",7,false,null],
-  [753,"Fomantis",7,true,"GO"],[754,"Lurantis",7,true,"HOME"],[755,"Morelull",7,false,null],[756,"Shiinotic",7,false,null],[757,"Salandit",7,false,null],[758,"Salazzle",7,false,null],[759,"Stufful",7,true,"HOME"],[760,"Bewear",7,true,"HOME"],
-  [761,"Bounsweet",7,false,null],[762,"Steenee",7,false,null],[763,"Tsareena",7,false,null],[764,"Comfey",7,false,null],[765,"Oranguru",7,true,"GO"],[766,"Passimian",7,true,"GO"],[767,"Wimpod",7,true,"HOME"],[768,"Golisopod",7,false,null],
-  [769,"Sandygast",7,false,null],[770,"Palossand",7,false,null],[771,"Pyukumuku",7,false,null],[772,"Type: Null",7,false,null],[773,"Silvally",7,false,null],[774,"Minior",7,true,"HOME"],[775,"Komala",7,false,null],[776,"Turtonator",7,false,null],
-  [777,"Togedemaru",7,false,null],[778,"Mimikyu",7,true,"HOME"],[779,"Bruxish",7,false,null],[780,"Drampa",7,false,null],[781,"Dhelmise",7,false,null],[782,"Jangmo-o",7,true,"begge"],[783,"Hakamo-o",7,true,"GO"],[784,"Kommo-o",7,true,"GO"],
-  [785,"Tapu Koko",7,true,"HOME"],[786,"Tapu Lele",7,false,null],[787,"Tapu Bulu",7,false,null],[788,"Tapu Fini",7,false,null],[789,"Cosmog",7,false,null],[790,"Cosmoem",7,false,null],[791,"Solgaleo",7,false,null],[792,"Lunala",7,true,"HOME"],
-  [793,"Nihilego",7,false,null],[794,"Buzzwole",7,false,null],[795,"Pheromosa",7,false,null],[796,"Xurkitree",7,false,null],[797,"Celesteela",7,false,null],[798,"Kartana",7,false,null],[799,"Guzzlord",7,false,null],[800,"Necrozma",7,true,"HOME"],
-  [801,"Magearna",7,false,null],[802,"Marshadow",7,false,null],[803,"Poipole",7,false,null],[804,"Naganadel",7,false,null],[805,"Stakataka",7,false,null],[806,"Blacephalon",7,false,null],[807,"Zeraora",7,true,"HOME"],[808,"Meltan",10,true,"HOME"],
-  [809,"Melmetal",10,true,"HOME"],[810,"Grookey",8,false,null],[811,"Thwackey",8,false,null],[812,"Rillaboom",8,false,null],[813,"Scorbunny",8,false,null],[814,"Raboot",8,false,null],[815,"Cinderace",8,true,"HOME"],[816,"Sobble",8,false,null],
-  [817,"Drizzile",8,false,null],[818,"Inteleon",8,false,null],[819,"Skwovet",8,true,"HOME"],[820,"Greedent",8,false,null],[821,"Rookidee",8,false,null],[822,"Corvisquire",8,false,null],[823,"Corviknight",8,false,null],[824,"Blipbug",8,false,null],
-  [825,"Dottler",8,false,null],[826,"Orbeetle",8,false,null],[827,"Nickit",8,false,null],[828,"Thievul",8,false,null],[829,"Gossifleur",8,false,null],[830,"Eldegoss",8,false,null],[831,"Wooloo",8,false,null],[832,"Dubwool",8,false,null],
-  [833,"Chewtle",8,false,null],[834,"Drednaw",8,false,null],[835,"Yamper",8,false,null],[836,"Boltund",8,false,null],[837,"Rolycoly",8,false,null],[838,"Carkol",8,false,null],[839,"Coalossal",8,false,null],[840,"Applin",8,false,null],
-  [841,"Flapple",8,true,"HOME"],[842,"Appletun",8,false,null],[843,"Silicobra",8,false,null],[844,"Sandaconda",8,false,null],[845,"Cramorant",8,false,null],[846,"Arrokuda",8,false,null],[847,"Barraskewda",8,false,null],[848,"Toxel",8,false,null],
-  [849,"Toxtricity",8,true,"HOME"],[850,"Sizzlipede",8,false,null],[851,"Centiskorch",8,false,null],[852,"Clobbopus",8,false,null],[853,"Grapploct",8,false,null],[854,"Sinistea",8,false,null],[855,"Polteageist",8,false,null],[856,"Hatenna",8,false,null],
-  [857,"Hattrem",8,false,null],[858,"Hatterene",8,true,"HOME"],[859,"Impidimp",8,false,null],[860,"Morgrem",8,false,null],[861,"Grimmsnarl",8,true,"HOME"],[862,"Obstagoon",8,true,"GO"],[863,"Perrserker",8,false,null],[864,"Cursola",8,false,null],
-  [865,"Sirfetch'd",8,false,null],[866,"Mr. Rime",8,false,null],[867,"Runerigus",8,false,null],[868,"Milcery",8,true,"HOME"],[869,"Alcremie",8,true,"HOME"],[870,"Falinks",8,false,null],[871,"Pincurchin",8,false,null],[872,"Snom",8,false,null],
-  [873,"Frosmoth",8,false,null],[874,"Stonjourner",8,false,null],[875,"Eiscue",8,true,"HOME"],[876,"Indeedee",8,true,"HOME"],[877,"Morpeko",8,true,"HOME"],[878,"Cufant",8,false,null],[879,"Copperajah",8,false,null],[880,"Dracozolt",8,false,null],
-  [881,"Arctozolt",8,false,null],[882,"Dracovish",8,false,null],[883,"Arctovish",8,false,null],[884,"Duraludon",8,true,"HOME"],[885,"Dreepy",8,true,"HOME"],[886,"Drakloak",8,false,null],[887,"Dragapult",8,true,"HOME"],[888,"Zacian",8,true,"HOME"],
-  [889,"Zamazenta",8,true,"HOME"],[890,"Eternatus",8,true,"HOME"],[891,"Kubfu",8,false,null],[892,"Urshifu",8,true,"HOME"],[893,"Zarude",8,false,null],[894,"Regieleki",8,false,null],[895,"Regidrago",8,false,null],[896,"Glastrier",8,false,null],
-  [897,"Spectrier",8,false,null],[898,"Calyrex",8,false,null],[899,"Wyrdeer",8,false,null],[900,"Kleavor",8,false,null],[901,"Ursaluna",8,true,"GO"],[902,"Basculegion",8,true,"HOME"],[903,"Sneasler",8,false,null],[904,"Overqwil",8,true,"GO"],
-  [905,"Enamorus",8,true,"HOME"],[906,"Sprigatito",9,true,"GO"],[907,"Floragato",9,true,"GO"],[908,"Meowscarada",9,true,"GO"],[909,"Fuecoco",9,true,"GO"],[910,"Crocalor",9,false,null],[911,"Skeledirge",9,false,null],[912,"Quaxly",9,false,null],
-  [913,"Quaxwell",9,false,null],[914,"Quaquaval",9,false,null],[915,"Lechonk",9,true,"HOME"],[916,"Oinkologne",9,true,"HOME"],[917,"Tarountula",9,false,null],[918,"Spidops",9,false,null],[919,"Nymble",9,false,null],[920,"Lokix",9,false,null],
-  [921,"Pawmi",9,true,"HOME"],[922,"Pawmo",9,false,null],[923,"Pawmot",9,false,null],[924,"Tandemaus",9,true,"GO"],[925,"Maushold",9,true,"GO"],[926,"Fidough",9,false,null],[927,"Dachsbun",9,false,null],[928,"Smoliv",9,false,null],
-  [929,"Dolliv",9,false,null],[930,"Arboliva",9,false,null],[931,"Squawkabilly",9,true,"HOME"],[932,"Nacli",9,false,null],[933,"Naclstack",9,false,null],[934,"Garganacl",9,true,"HOME"],[935,"Charcadet",9,true,"HOME"],[936,"Armarouge",9,false,null],
-  [937,"Ceruledge",9,false,null],[938,"Tadbulb",9,false,null],[939,"Bellibolt",9,false,null],[940,"Wattrel",9,false,null],[941,"Kilowattrel",9,false,null],[942,"Maschiff",9,false,null],[943,"Mabosstiff",9,false,null],[944,"Shroodle",9,true,"HOME"],
-  [945,"Grafaiai",9,true,"HOME"],[946,"Bramblin",9,false,null],[947,"Brambleghast",9,false,null],[948,"Toedscool",9,true,"HOME"],[949,"Toedscruel",9,false,null],[950,"Klawf",9,true,"HOME"],[951,"Capsakid",9,true,"HOME"],[952,"Scovillain",9,false,null],
-  [953,"Rellor",9,true,"HOME"],[954,"Rabsca",9,false,null],[955,"Flittle",9,true,"HOME"],[956,"Espathra",9,false,null],[957,"Tinkatink",9,false,null],[958,"Tinkatuff",9,false,null],[959,"Tinkaton",9,false,null],[960,"Wiglett",9,false,null],
-  [961,"Wugtrio",9,true,"HOME"],[962,"Bombirdier",9,false,null],[963,"Finizen",9,true,"HOME"],[964,"Palafin",9,true,"HOME"],[965,"Varoom",9,true,"HOME"],[966,"Revavroom",9,true,"HOME"],[967,"Cyclizar",9,false,null],[968,"Orthworm",9,true,"HOME"],
-  [969,"Glimmet",9,false,null],[970,"Glimmora",9,false,null],[971,"Greavard",9,true,"HOME"],[972,"Houndstone",9,false,null],[973,"Flamigo",9,false,null],[974,"Cetoddle",9,false,null],[975,"Cetitan",9,true,"HOME"],[976,"Veluza",9,false,null],
-  [977,"Dondozo",9,true,"HOME"],[978,"Tatsugiri",9,true,"HOME"],[979,"Annihilape",9,false,null],[980,"Clodsire",9,false,null],[981,"Farigiraf",9,true,"HOME"],[982,"Dudunsparce",9,true,"HOME"],[983,"Kingambit",9,true,"HOME"],[984,"Great Tusk",9,false,null],
-  [985,"Scream Tail",9,false,null],[986,"Brute Bonnet",9,false,null],[987,"Flutter Mane",9,false,null],[988,"Slither Wing",9,false,null],[989,"Sandy Shocks",9,false,null],[990,"Iron Treads",9,false,null],[991,"Iron Bundle",9,false,null],[992,"Iron Hands",9,false,null],
-  [993,"Iron Jugulis",9,false,null],[994,"Iron Moth",9,false,null],[995,"Iron Thorns",9,false,null],[996,"Frigibax",9,true,"HOME"],[997,"Arctibax",9,false,null],[998,"Baxcalibur",9,false,null],[999,"Gimmighoul",9,true,"GO"],[1000,"Gholdengo",9,false,null],
-  [1001,"Wo-Chien",9,true,"HOME"],[1002,"Chien-Pao",9,true,"HOME"],[1003,"Ting-Lu",9,true,"HOME"],[1004,"Chi-Yu",9,true,"HOME"],[1005,"Roaring Moon",9,false,null],[1006,"Iron Valiant",9,false,null],[1007,"Koraidon",9,false,null],[1008,"Miraidon",9,false,null],
-  [1009,"Walking Wake",9,false,null],[1010,"Iron Leaves",9,false,null],[1011,"Dipplin",9,true,"HOME"],[1012,"Poltchageist",9,false,null],[1013,"Sinistcha",9,false,null],[1014,"Okidogi",9,false,null],[1015,"Munkidori",9,false,null],[1016,"Fezandipiti",9,false,null],
-  [1017,"Ogerpon",9,true,"HOME"],[1018,"Archaludon",9,false,null],[1019,"Hydrapple",9,false,null],[1020,"Gouging Fire",9,false,null],[1021,"Raging Bolt",9,false,null],[1022,"Iron Boulder",9,false,null],[1023,"Iron Crown",9,false,null],[1024,"Terapagos",9,true,"HOME"],
-  [1025,"Pecharunt",9,false,null]
+  // Gen 1
+  [1,"Bulbasaur",1,true,"GO"],[2,"Ivysaur",1,true,"GO"],[3,"Venusaur",1,true,"GO"],
+  [4,"Charmander",1,true,"HOME"],[5,"Charmeleon",1,true,"HOME"],[6,"Charizard",1,true,"HOME"],
+  [7,"Squirtle",1,true,"HOME"],[8,"Wartortle",1,true,"GO"],[9,"Blastoise",1,true,"HOME"],
+  [10,"Caterpie",1,true,"HOME"],[11,"Metapod",1,true,"GO"],[12,"Butterfree",1,true,"HOME"],
+  [13,"Weedle",1,true,"GO"],[14,"Kakuna",1,false,null],[15,"Beedrill",1,true,"GO"],
+  [16,"Pidgey",1,true,"GO"],[17,"Pidgeotto",1,true,"GO"],[18,"Pidgeot",1,true,"GO"],
+  [19,"Rattata",1,true,"GO"],[20,"Raticate",1,true,"GO"],[21,"Spearow",1,false,null],
+  [22,"Fearow",1,false,null],[23,"Ekans",1,true,"GO"],[24,"Arbok",1,false,null],
+  [25,"Pikachu",1,true,"GO"],[26,"Raichu",1,true,"GO"],[27,"Sandshrew",1,true,"GO"],
+  [28,"Sandslash",1,true,"HOME"],[29,"Nidoran♀",1,true,"GO"],[30,"Nidorina",1,false,null],
+  [31,"Nidoqueen",1,false,null],[32,"Nidoran♂",1,true,"GO"],[33,"Nidorino",1,true,"GO"],
+  [34,"Nidoking",1,true,"GO"],[35,"Clefairy",1,true,"HOME"],[36,"Clefable",1,false,null],
+  [37,"Vulpix",1,true,"GO"],[38,"Ninetales",1,true,"GO"],[39,"Jigglypuff",1,true,"GO"],
+  [40,"Wigglytuff",1,true,"GO"],[41,"Zubat",1,false,null],[42,"Golbat",1,false,null],
+  [43,"Oddish",1,true,"GO"],[44,"Gloom",1,true,"GO"],[45,"Vileplume",1,false,null],
+  [46,"Paras",1,false,null],[47,"Parasect",1,false,null],[48,"Venonat",1,true,"HOME"],
+  [49,"Venomoth",1,false,null],[50,"Diglett",1,true,"GO"],[51,"Dugtrio",1,false,null],
+  [52,"Meowth",1,true,"HOME"],[53,"Persian",1,true,"GO"],[54,"Psyduck",1,true,"HOME"],
+  [55,"Golduck",1,false,null],[56,"Mankey",1,true,"GO"],[57,"Primeape",1,true,"GO"],
+  [58,"Growlithe",1,true,"GO"],[59,"Arcanine",1,true,"HOME"],[60,"Poliwag",1,true,"GO"],
+  [61,"Poliwhirl",1,false,null],[62,"Poliwrath",1,false,null],[63,"Abra",1,true,"GO"],
+  [64,"Kadabra",1,true,"GO"],[65,"Alakazam",1,true,"GO"],[66,"Machop",1,true,"HOME"],
+  [67,"Machoke",1,true,"GO"],[68,"Machamp",1,true,"GO"],[69,"Bellsprout",1,true,"GO"],
+  [70,"Weepinbell",1,false,null],[71,"Victreebel",1,false,null],[72,"Tentacool",1,true,"HOME"],
+  [73,"Tentacruel",1,false,null],[74,"Geodude",1,true,"HOME"],[75,"Graveler",1,true,"GO"],
+  [76,"Golem",1,true,"HOME"],[77,"Ponyta",1,true,"HOME"],[78,"Rapidash",1,true,"GO"],
+  [79,"Slowpoke",1,true,"GO"],[80,"Slowbro",1,true,"GO"],[81,"Magnemite",1,false,null],
+  [82,"Magneton",1,false,null],[83,"Farfetch'd",1,true,"GO"],[84,"Doduo",1,true,"HOME"],
+  [85,"Dodrio",1,false,null],[86,"Seel",1,false,null],[87,"Dewgong",1,false,null],
+  [88,"Grimer",1,true,"GO"],[89,"Muk",1,true,"GO"],[90,"Shellder",1,true,"GO"],
+  [91,"Cloyster",1,true,"GO"],[92,"Gastly",1,true,"GO"],[93,"Haunter",1,true,"GO"],
+  [94,"Gengar",1,true,"HOME"],[95,"Onix",1,true,"GO"],[96,"Drowzee",1,false,null],
+  [97,"Hypno",1,true,"HOME"],[98,"Krabby",1,false,null],[99,"Kingler",1,false,null],
+  [100,"Voltorb",1,true,"GO"],[101,"Electrode",1,false,null],[102,"Exeggcute",1,true,"HOME"],
+  [103,"Exeggutor",1,true,"HOME"],[104,"Cubone",1,true,"HOME"],[105,"Marowak",1,false,null],
+  [106,"Hitmonlee",1,true,"GO"],[107,"Hitmonchan",1,true,"GO"],[108,"Lickitung",1,true,"GO"],
+  [109,"Koffing",1,true,"GO"],[110,"Weezing",1,true,"GO"],[111,"Rhyhorn",1,true,"HOME"],
+  [112,"Rhydon",1,true,"GO"],[113,"Chansey",1,true,"HOME"],[114,"Tangela",1,true,"GO"],
+  [115,"Kangaskhan",1,true,"GO"],[116,"Horsea",1,false,null],[117,"Seadra",1,true,"HOME"],
+  [118,"Goldeen",1,true,"GO"],[119,"Seaking",1,false,null],[120,"Staryu",1,true,"GO"],
+  [121,"Starmie",1,true,"GO"],[122,"Mr. Mime",1,true,"GO"],[123,"Scyther",1,true,"GO"],
+  [124,"Jynx",1,true,"HOME"],[125,"Electabuzz",1,true,"HOME"],[126,"Magmar",1,true,"HOME"],
+  [127,"Pinsir",1,true,"HOME"],[128,"Tauros",1,false,null],[129,"Magikarp",1,true,"HOME"],
+  [130,"Gyarados",1,true,"HOME"],[131,"Lapras",1,true,"HOME"],[132,"Ditto",1,true,"HOME"],
+  [133,"Eevee",1,true,"HOME"],[134,"Vaporeon",1,true,"HOME"],[135,"Jolteon",1,true,"HOME"],
+  [136,"Flareon",1,false,null],[137,"Porygon",1,true,"HOME"],[138,"Omanyte",1,true,"GO"],
+  [139,"Omastar",1,true,"HOME"],[140,"Kabuto",1,true,"GO"],[141,"Kabutops",1,true,"HOME"],
+  [142,"Aerodactyl",1,true,"HOME"],[143,"Snorlax",1,true,"GO"],[144,"Articuno",1,true,"GO"],
+  [145,"Zapdos",1,true,"GO"],[146,"Moltres",1,true,"GO"],[147,"Dratini",1,true,"HOME"],
+  [148,"Dragonair",1,true,"GO"],[149,"Dragonite",1,true,"HOME"],[150,"Mewtwo",1,true,"HOME"],
+  [151,"Mew",1,true,"HOME"],
+  // Gen 2
+  [152,"Chikorita",2,true,"GO"],[153,"Bayleef",2,true,"GO"],[154,"Meganium",2,true,"GO"],
+  [155,"Cyndaquil",2,true,"GO"],[156,"Quilava",2,true,"GO"],[157,"Typhlosion",2,true,"GO"],
+  [158,"Totodile",2,false,null],[159,"Croconaw",2,false,null],[160,"Feraligatr",2,false,null],
+  [161,"Sentret",2,false,null],[162,"Furret",2,false,null],[163,"Hoothoot",2,true,"HOME"],
+  [164,"Noctowl",2,false,null],[165,"Ledyba",2,true,"GO"],[166,"Ledian",2,false,null],
+  [167,"Spinarak",2,false,null],[168,"Ariados",2,false,null],[169,"Crobat",2,false,null],
+  [170,"Chinchou",2,true,"HOME"],[171,"Lanturn",2,true,"HOME"],[172,"Pichu",2,false,null],
+  [173,"Cleffa",2,false,null],[174,"Igglybuff",2,false,null],[175,"Togepi",2,true,"HOME"],
+  [176,"Togetic",2,true,"GO"],[177,"Natu",2,false,null],[178,"Xatu",2,false,null],
+  [179,"Mareep",2,true,"GO"],[180,"Flaaffy",2,false,null],[181,"Ampharos",2,true,"GO"],
+  [182,"Bellossom",2,false,null],[183,"Marill",2,true,"GO"],[184,"Azumarill",2,true,"GO"],
+  [185,"Sudowoodo",2,true,"GO"],[186,"Politoed",2,false,null],[187,"Hoppip",2,true,"GO"],
+  [188,"Skiploom",2,false,null],[189,"Jumpluff",2,false,null],[190,"Aipom",2,true,"HOME"],
+  [191,"Sunkern",2,false,null],[192,"Sunflora",2,false,null],[193,"Yanma",2,true,"HOME"],
+  [194,"Wooper",2,true,"HOME"],[195,"Quagsire",2,false,null],[196,"Espeon",2,true,"GO"],
+  [197,"Umbreon",2,true,"GO"],[198,"Murkrow",2,true,"HOME"],[199,"Slowking",2,true,"GO"],
+  [200,"Misdreavus",2,false,null],[201,"Unown",2,true,"HOME"],[202,"Wobbuffet",2,true,"GO"],
+  [203,"Girafarig",2,true,"GO"],[204,"Pineco",2,true,"GO"],[205,"Forretress",2,true,"HOME"],
+  [206,"Dunsparce",2,true,"HOME"],[207,"Gligar",2,true,"GO"],[208,"Steelix",2,true,"GO"],
+  [209,"Snubbull",2,true,"GO"],[210,"Granbull",2,true,"GO"],[211,"Qwilfish",2,false,null],
+  [212,"Scizor",2,true,"GO"],[213,"Shuckle",2,true,"GO"],[214,"Heracross",2,true,"HOME"],
+  [215,"Sneasel",2,true,"GO"],[216,"Teddiursa",2,true,"GO"],[217,"Ursaring",2,true,"GO"],
+  [218,"Slugma",2,true,"HOME"],[219,"Magcargo",2,false,null],[220,"Swinub",2,true,"HOME"],
+  [221,"Piloswine",2,true,"HOME"],[222,"Corsola",2,true,"HOME"],[223,"Remoraid",2,false,null],
+  [224,"Octillery",2,false,null],[225,"Delibird",2,true,"GO"],[226,"Mantine",2,true,"GO"],
+  [227,"Skarmory",2,true,"GO"],[228,"Houndour",2,true,"GO"],[229,"Houndoom",2,true,"GO"],
+  [230,"Kingdra",2,false,null],[231,"Phanpy",2,false,null],[232,"Donphan",2,false,null],
+  [233,"Porygon2",2,false,null],[234,"Stantler",2,false,null],[235,"Smeargle",2,true,"GO"],
+  [236,"Tyrogue",2,false,null],[237,"Hitmontop",2,false,null],[238,"Smoochum",2,false,null],
+  [239,"Elekid",2,true,"HOME"],[240,"Magby",2,false,null],[241,"Miltank",2,true,"HOME"],
+  [242,"Blissey",2,false,null],[243,"Raikou",2,false,null],[244,"Entei",2,false,null],
+  [245,"Suicune",2,false,null],[246,"Larvitar",2,true,"GO"],[247,"Pupitar",2,true,"GO"],
+  [248,"Tyranitar",2,true,"GO"],[249,"Lugia",2,false,null],[250,"Ho-oh",2,false,null],
+  [251,"Celebi",2,true,"GO"],
+  // Gen 3
+  [252,"Treecko",3,true,"GO"],[253,"Grovyle",3,false,null],[254,"Sceptile",3,false,null],
+  [255,"Torchic",3,false,null],[256,"Combusken",3,false,null],[257,"Blaziken",3,false,null],
+  [258,"Mudkip",3,true,"GO"],[259,"Marshtomp",3,false,null],[260,"Swampert",3,true,"GO"],
+  [261,"Poochyena",3,true,"GO"],[262,"Mightyena",3,true,"GO"],[263,"Zigzagoon",3,true,"GO"],
+  [264,"Linoone",3,false,null],[265,"Wurmple",3,false,null],[266,"Silcoon",3,false,null],
+  [267,"Beautifly",3,false,null],[268,"Cascoon",3,false,null],[269,"Dustox",3,false,null],
+  [270,"Lotad",3,true,"GO"],[271,"Lombre",3,false,null],[272,"Ludicolo",3,true,"GO"],
+  [273,"Seedot",3,true,"GO"],[274,"Nuzleaf",3,true,"GO"],[275,"Shiftry",3,true,"GO"],
+  [276,"Taillow",3,false,null],[277,"Swellow",3,false,null],[278,"Wingull",3,true,"GO"],
+  [279,"Pelipper",3,true,"GO"],[280,"Ralts",3,true,"GO"],[281,"Kirlia",3,false,null],
+  [282,"Gardevoir",3,true,"GO"],[283,"Surskit",3,false,null],[284,"Masquerain",3,false,null],
+  [285,"Shroomish",3,false,null],[286,"Breloom",3,false,null],[287,"Slakoth",3,true,"GO"],
+  [288,"Vigoroth",3,false,null],[289,"Slaking",3,false,null],[290,"Nincada",3,false,null],
+  [291,"Ninjask",3,false,null],[292,"Shedinja",3,false,null],[293,"Whismur",3,true,"GO"],
+  [294,"Loudred",3,false,null],[295,"Exploud",3,false,null],[296,"Makuhita",3,true,"GO"],
+  [297,"Hariyama",3,true,"GO"],[298,"Azurill",3,false,null],[299,"Nosepass",3,true,"GO"],
+  [300,"Skitty",3,false,null],[301,"Delcatty",3,false,null],[302,"Sableye",3,true,"GO"],
+  [303,"Mawile",3,false,null],[304,"Aron",3,true,"GO"],[305,"Lairon",3,false,null],
+  [306,"Aggron",3,true,"GO"],[307,"Meditite",3,true,"HOME"],[308,"Medicham",3,true,"HOME"],
+  [309,"Electrike",3,false,null],[310,"Manectric",3,false,null],[311,"Plusle",3,true,"HOME"],
+  [312,"Minun",3,true,"HOME"],[313,"Volbeat",3,false,null],[314,"Illumise",3,true,"GO"],
+  [315,"Roselia",3,true,"GO"],[316,"Gulpin",3,true,"GO"],[317,"Swalot",3,true,"GO"],
+  [318,"Carvanha",3,true,"GO"],[319,"Sharpedo",3,true,"GO"],[320,"Wailmer",3,true,"HOME"],
+  [321,"Wailord",3,true,"HOME"],[322,"Numel",3,true,"HOME"],[323,"Camerupt",3,false,null],
+  [324,"Torkoal",3,true,"GO"],[325,"Spoink",3,true,"GO"],[326,"Grumpig",3,true,"GO"],
+  [327,"Spinda",3,true,"HOME"],[328,"Trapinch",3,true,"GO"],[329,"Vibrava",3,false,null],
+  [330,"Flygon",3,true,"GO"],[331,"Cacnea",3,false,null],[332,"Cacturne",3,false,null],
+  [333,"Swablu",3,true,"HOME"],[334,"Altaria",3,true,"HOME"],[335,"Zangoose",3,true,"HOME"],
+  [336,"Seviper",3,false,null],[337,"Lunatone",3,true,"GO"],[338,"Solrock",3,true,"GO"],
+  [339,"Barboach",3,true,"GO"],[340,"Whiscash",3,false,null],[341,"Corphish",3,false,null],
+  [342,"Crawdaunt",3,false,null],[343,"Baltoy",3,false,null],[344,"Claydol",3,false,null],
+  [345,"Lileep",3,false,null],[346,"Cradily",3,false,null],[347,"Anorith",3,false,null],
+  [348,"Armaldo",3,false,null],[349,"Feebas",3,true,"HOME"],[350,"Milotic",3,false,null],
+  [351,"Castform",3,true,"GO"],[352,"Kecleon",3,false,null],[353,"Shuppet",3,false,null],
+  [354,"Banette",3,false,null],[355,"Duskull",3,true,"GO"],[356,"Dusclops",3,true,"GO"],
+  [357,"Tropius",3,true,"HOME"],[358,"Chimecho",3,true,"GO"],[359,"Absol",3,true,"GO"],
+  [360,"Wynaut",3,false,null],[361,"Snorunt",3,true,"HOME"],[362,"Glalie",3,true,"HOME"],
+  [363,"Spheal",3,true,"GO"],[364,"Sealeo",3,false,null],[365,"Walrein",3,true,"GO"],
+  [366,"Clamperl",3,true,"GO"],[367,"Huntail",3,true,"GO"],[368,"Gorebyss",3,true,"GO"],
+  [369,"Relicanth",3,false,null],[370,"Luvdisc",3,true,"GO"],[371,"Bagon",3,true,"GO"],
+  [372,"Shelgon",3,false,null],[373,"Salamence",3,true,"GO"],[374,"Beldum",3,true,"HOME"],
+  [375,"Metang",3,true,"HOME"],[376,"Metagross",3,true,"HOME"],[377,"Regirock",3,true,"GO"],
+  [378,"Regice",3,false,null],[379,"Registeel",3,true,"GO"],[380,"Latias",3,false,null],
+  [381,"Latios",3,true,"GO"],[382,"Kyogre",3,true,"GO"],[383,"Groudon",3,true,"GO"],
+  [384,"Rayquaza",3,true,"GO"],[385,"Jirachi",3,false,null],
+  // Gen 4
+  [387,"Turtwig",4,true,"GO"],[388,"Grotle",4,true,"GO"],[389,"Torterra",4,true,"GO"],
+  [390,"Chimchar",4,true,"GO"],[391,"Monferno",4,true,"GO"],[392,"Infernape",4,true,"GO"],
+  [393,"Piplup",4,true,"GO"],[394,"Prinplup",4,true,"GO"],[395,"Empoleon",4,true,"GO"],
+  [396,"Starly",4,true,"GO"],[397,"Staravia",4,false,null],[398,"Staraptor",4,true,"GO"],
+  [399,"Bidoof",4,true,"GO"],[400,"Bibarel",4,false,null],[401,"Kricketot",4,true,"GO"],
+  [402,"Kricketune",4,true,"GO"],[403,"Shinx",4,true,"begge"],[404,"Luxio",4,true,"GO"],
+  [405,"Luxray",4,true,"GO"],[406,"Budew",4,false,null],[407,"Roserade",4,true,"GO"],
+  [408,"Cranidos",4,true,"GO"],[409,"Rampardos",4,true,"GO"],[410,"Shieldon",4,false,null],
+  [411,"Bastiodon",4,false,null],[414,"Mothim",4,false,null],[415,"Combee",4,true,"GO"],
+  [416,"Vespiquen",4,false,null],[417,"Pachirisu",4,true,"HOME"],[418,"Buizel",4,true,"GO"],
+  [419,"Floatzel",4,false,null],[420,"Cherubi",4,false,null],[421,"Cherrim",4,false,null],
+  [422,"Shellos",4,true,"GO"],[423,"Gastrodon",4,false,null],[424,"Ambipom",4,true,"GO"],
+  [425,"Drifloon",4,true,"HOME"],[426,"Drifblim",4,true,"HOME"],[427,"Buneary",4,false,null],
+  [428,"Lopunny",4,false,null],[429,"Mismagius",4,false,null],[430,"Honchkrow",4,false,null],
+  [431,"Glameow",4,false,null],[432,"Purugly",4,false,null],[433,"Chingling",4,true,"HOME"],
+  [434,"Stunky",4,true,"GO"],[435,"Skuntank",4,false,null],[436,"Bronzor",4,true,"GO"],
+  [437,"Bronzong",4,true,"GO"],[438,"Bonsly",4,false,null],[439,"Mime Jr.",4,false,null],
+  [440,"Happiny",4,false,null],[441,"Chatot",4,false,null],[442,"Spiritomb",4,false,null],
+  [443,"Gible",4,true,"HOME"],[444,"Gabite",4,true,"HOME"],[445,"Garchomp",4,true,"HOME"],
+  [446,"Munchlax",4,true,"GO"],[447,"Riolu",4,true,"GO"],[448,"Lucario",4,true,"HOME"],
+  [449,"Hippopotas",4,false,null],[450,"Hippowdon",4,true,"GO"],[451,"Skorupi",4,false,null],
+  [452,"Drapion",4,true,"HOME"],[453,"Croagunk",4,true,"GO"],[454,"Toxicroak",4,false,null],
+  [455,"Carnivine",4,false,null],[456,"Finneon",4,false,null],[457,"Lumineon",4,true,"HOME"],
+  [458,"Mantyke",4,false,null],[459,"Snover",4,false,null],[460,"Abomasnow",4,false,null],
+  [461,"Weavile",4,true,"GO"],[462,"Magnezone",4,false,null],[463,"Lickilicky",4,true,"HOME"],
+  [464,"Rhyperior",4,true,"GO"],[465,"Tangrowth",4,true,"GO"],[466,"Electivire",4,true,"GO"],
+  [467,"Magmortar",4,true,"GO"],[468,"Togekiss",4,true,"GO"],[469,"Yanmega",4,false,null],
+  [470,"Leafeon",4,true,"GO"],[471,"Glaceon",4,false,null],[472,"Gliscor",4,true,"GO"],
+  [473,"Mamoswine",4,false,null],[474,"Porygon-Z",4,true,"GO"],[475,"Gallade",4,true,"GO"],
+  [476,"Probopass",4,false,null],[477,"Dusknoir",4,true,"GO"],[478,"Froslass",4,false,null],
+  [479,"Rotom",4,false,null],[480,"Uxie",4,false,null],[481,"Mesprit",4,true,"GO"],
+  [482,"Azelf",4,false,null],[483,"Dialga",4,false,null],[484,"Palkia",4,false,null],
+  [485,"Heatran",4,false,null],[486,"Regigigas",4,false,null],[488,"Cresselia",4,false,null],
+  [489,"Phione",4,false,null],[490,"Manaphy",4,false,null],[491,"Darkrai",4,true,"GO"],
+  [493,"Arceus",4,true,"HOME"],
+  // Gen 5
+  [494,"Victini",5,false,null],[495,"Snivy",5,true,"GO"],[496,"Servine",5,true,"GO"],
+  [497,"Serperior",5,true,"GO"],[498,"Tepig",5,true,"GO"],[499,"Pignite",5,true,"GO"],
+  [500,"Emboar",5,true,"GO"],[501,"Oshawott",5,true,"GO"],[502,"Dewott",5,true,"GO"],
+  [503,"Samurott",5,true,"GO"],[504,"Patrat",5,false,null],[505,"Watchog",5,false,null],
+  [506,"Lillipup",5,false,null],[507,"Herdier",5,false,null],[508,"Stoutland",5,false,null],
+  [509,"Purrloin",5,false,null],[510,"Liepard",5,false,null],[511,"Pansage",5,false,null],
+  [512,"Simisage",5,false,null],[513,"Pansear",5,true,"GO"],[514,"Simisear",5,false,null],
+  [515,"Panpour",5,false,null],[516,"Simipour",5,false,null],[517,"Munna",5,false,null],
+  [518,"Musharna",5,false,null],[519,"Pidove",5,false,null],[520,"Tranquill",5,false,null],
+  [521,"Unfezant",5,false,null],[522,"Blitzle",5,false,null],[523,"Zebstrika",5,true,"HOME"],
+  [524,"Roggenrola",5,true,"GO"],[525,"Boldore",5,true,"GO"],[526,"Gigalith",5,true,"GO"],
+  [527,"Woobat",5,true,"GO"],[528,"Swoobat",5,false,null],[529,"Drilbur",5,true,"HOME"],
+  [530,"Excadrill",5,false,null],[531,"Audino",5,false,null],[532,"Timburr",5,true,"GO"],
+  [533,"Gurdurr",5,false,null],[534,"Conkeldurr",5,false,null],[535,"Tympole",5,true,"GO"],
+  [536,"Palpitoad",5,false,null],[537,"Seismitoad",5,true,"GO"],[538,"Throh",5,false,null],
+  [539,"Sawk",5,false,null],[540,"Sewaddle",5,false,null],[541,"Swadloon",5,false,null],
+  [542,"Leavanny",5,false,null],[543,"Venipede",5,false,null],[544,"Whirlipede",5,false,null],
+  [545,"Scolipede",5,false,null],[546,"Cottonee",5,true,"GO"],[547,"Whimsicott",5,false,null],
+  [548,"Petilil",5,false,null],[549,"Lilligant",5,false,null],[551,"Sandile",5,false,null],
+  [552,"Krokorok",5,false,null],[553,"Krookodile",5,false,null],[554,"Darumaka",5,false,null],
+  [556,"Maractus",5,false,null],[557,"Dwebble",5,true,"GO"],[558,"Crustle",5,false,null],
+  [559,"Scraggy",5,false,null],[560,"Scrafty",5,false,null],[561,"Sigilyph",5,false,null],
+  [562,"Yamask",5,false,null],[563,"Cofagrigus",5,true,"GO"],[564,"Tirtouga",5,false,null],
+  [565,"Carracosta",5,false,null],[566,"Archen",5,true,"GO"],[567,"Archeops",5,false,null],
+  [568,"Trubbish",5,false,null],[569,"Garbodor",5,false,null],[570,"Zorua",5,false,null],
+  [571,"Zoroark",5,false,null],[572,"Minccino",5,true,"GO"],[573,"Cinccino",5,true,"GO"],
+  [574,"Gothita",5,false,null],[575,"Gothorita",5,false,null],[576,"Gothitelle",5,false,null],
+  [577,"Solosis",5,false,null],[578,"Duosion",5,false,null],[579,"Reuniclus",5,false,null],
+  [580,"Ducklett",5,true,"GO"],[581,"Swanna",5,false,null],[582,"Vanillite",5,true,"GO"],
+  [583,"Vanillish",5,false,null],[584,"Vanilluxe",5,false,null],[585,"Deerling",5,false,null],
+  [586,"Sawsbuck",5,false,null],[587,"Emolga",5,true,"GO"],[588,"Karrablast",5,true,"GO"],
+  [589,"Escavalier",5,false,null],[590,"Foongus",5,false,null],[591,"Amoonguss",5,true,"HOME"],
+  [592,"Frillish",5,false,null],[593,"Jellicent",5,false,null],[594,"Alomomola",5,true,"GO"],
+  [595,"Joltik",5,false,null],[596,"Galvantula",5,false,null],[597,"Ferroseed",5,false,null],
+  [598,"Ferrothorn",5,false,null],[599,"Klink",5,false,null],[600,"Klang",5,false,null],
+  [601,"Klinklang",5,false,null],[602,"Tynamo",5,false,null],[603,"Eelektrik",5,false,null],
+  [604,"Eelektross",5,true,"GO"],[605,"Elgyem",5,true,"GO"],[606,"Beheeyem",5,false,null],
+  [607,"Litwick",5,true,"GO"],[608,"Lampent",5,false,null],[609,"Chandelure",5,false,null],
+  [610,"Axew",5,true,"GO"],[611,"Fraxure",5,false,null],[612,"Haxorus",5,false,null],
+  [613,"Cubchoo",5,true,"GO"],[614,"Beartic",5,false,null],[615,"Cryogonal",5,false,null],
+  [616,"Shelmet",5,true,"GO"],[617,"Accelgor",5,false,null],[618,"Stunfisk",5,true,"GO"],
+  [619,"Mienfoo",5,false,null],[620,"Mienshao",5,false,null],[621,"Druddigon",5,false,null],
+  [622,"Golett",5,false,null],[623,"Golurk",5,false,null],[624,"Pawniard",5,true,"GO"],
+  [625,"Bisharp",5,true,"GO"],[626,"Bouffalant",5,false,null],[627,"Rufflet",5,true,"GO"],
+  [628,"Braviary",5,false,null],[629,"Vullaby",5,false,null],[630,"Mandibuzz",5,false,null],
+  [631,"Heatmor",5,true,"GO"],[632,"Durant",5,false,null],[633,"Deino",5,true,"GO"],
+  [634,"Zweilous",5,true,"GO"],[635,"Hydreigon",5,false,null],[636,"Larvesta",5,true,"begge"],
+  [637,"Volcarona",5,false,null],[638,"Cobalion",5,false,null],[639,"Terrakion",5,false,null],
+  [640,"Virizion",5,false,null],[643,"Reshiram",5,false,null],[644,"Zekrom",5,false,null],
+  [646,"Kyurem",5,false,null],[649,"Genesect",5,true,"GO"],
+  // Gen 6
+  [650,"Chespin",6,true,"GO"],[651,"Quilladin",6,false,null],[652,"Chesnaught",6,false,null],
+  [653,"Fennekin",6,true,"GO"],[654,"Braixen",6,false,null],[655,"Delphox",6,false,null],
+  [656,"Froakie",6,true,"GO"],[657,"Frogadier",6,true,"GO"],[658,"Greninja",6,true,"GO"],
+  [659,"Bunnelby",6,false,null],[660,"Diggersby",6,false,null],[661,"Fletchling",6,true,"begge"],
+  [662,"Fletchinder",6,true,"GO"],[663,"Talonflame",6,true,"GO"],[664,"Scatterbug",6,false,null],
+  [665,"Spewpa",6,false,null],[666,"Vivillon",6,false,null],[667,"Litleo",6,true,"GO"],
+  [668,"Pyroar",6,false,null],[669,"Flabébé",6,false,null],[670,"Floette",6,false,null],
+  [671,"Florges",6,true,"HOME"],[672,"Skiddo",6,true,"HOME"],[673,"Gogoat",6,true,"HOME"],
+  [674,"Pancham",6,false,null],[675,"Pangoro",6,false,null],[676,"Furfrou",6,false,null],
+  [677,"Espurr",6,true,"GO"],[679,"Honedge",6,false,null],[680,"Doublade",6,false,null],
+  [682,"Spritzee",6,false,null],[683,"Aromatisse",6,false,null],[684,"Swirlix",6,true,"GO"],
+  [685,"Slurpuff",6,false,null],[686,"Inkay",6,true,"GO"],[687,"Malamar",6,false,null],
+  [688,"Binacle",6,true,"GO"],[689,"Barbaracle",6,true,"GO"],[690,"Skrelp",6,false,null],
+  [691,"Dragalge",6,false,null],[692,"Clauncher",6,true,"HOME"],[693,"Clawitzer",6,false,null],
+  [694,"Helioptile",6,true,"GO"],[695,"Heliolisk",6,true,"GO"],[696,"Tyrunt",6,false,null],
+  [697,"Tyrantrum",6,false,null],[698,"Amaura",6,true,"GO"],[699,"Aurorus",6,false,null],
+  [700,"Sylveon",6,true,"GO"],[701,"Hawlucha",6,true,"HOME"],[702,"Dedenne",6,true,"HOME"],
+  [703,"Carbink",6,true,"HOME"],[704,"Goomy",6,true,"begge"],[705,"Sliggoo",6,true,"GO"],
+  [706,"Goodra",6,true,"GO"],[707,"Klefki",6,false,null],[708,"Phantump",6,true,"GO"],
+  [709,"Trevenant",6,false,null],[712,"Bergmite",6,false,null],[713,"Avalugg",6,true,"GO"],
+  [714,"Noibat",6,true,"HOME"],[715,"Noivern",6,true,"HOME"],[716,"Xerneas",6,true,"HOME"],
+  [717,"Yveltal",6,true,"HOME"],[718,"Zygarde",6,false,null],[719,"Diancie",6,false,null],
+  [721,"Volcanion",6,false,null],
+  // Gen 7
+  [722,"Rowlet",7,false,null],[723,"Dartrix",7,false,null],[724,"Decidueye",7,false,null],
+  [725,"Litten",7,true,"GO"],[726,"Torracat",7,true,"begge"],[727,"Incineroar",7,true,"GO"],
+  [728,"Popplio",7,false,null],[729,"Brionne",7,false,null],[730,"Primarina",7,true,"GO"],
+  [731,"Pikipek",7,true,"HOME"],[732,"Trumbeak",7,false,null],[733,"Toucannon",7,false,null],
+  [734,"Yungoos",7,true,"HOME"],[735,"Gumshoos",7,false,null],[736,"Grubbin",7,true,"GO"],
+  [737,"Charjabug",7,true,"GO"],[738,"Vikavolt",7,true,"GO"],[739,"Crabrawler",7,false,null],
+  [740,"Crabominable",7,true,"GO"],[742,"Cutiefly",7,false,null],[743,"Ribombee",7,false,null],
+  [744,"Rockruff",7,true,"HOME"],[747,"Mareanie",7,false,null],[748,"Toxapex",7,true,"GO"],
+  [749,"Mudbray",7,true,"HOME"],[750,"Mudsdale",7,false,null],[751,"Dewpider",7,true,"GO"],
+  [752,"Araquanid",7,false,null],[753,"Fomantis",7,true,"GO"],[754,"Lurantis",7,true,"HOME"],
+  [755,"Morelull",7,false,null],[756,"Shiinotic",7,false,null],[757,"Salandit",7,false,null],
+  [758,"Salazzle",7,false,null],[759,"Stufful",7,true,"HOME"],[760,"Bewear",7,true,"HOME"],
+  [761,"Bounsweet",7,false,null],[762,"Steenee",7,false,null],[763,"Tsareena",7,false,null],
+  [764,"Comfey",7,false,null],[765,"Oranguru",7,true,"GO"],[766,"Passimian",7,true,"GO"],
+  [767,"Wimpod",7,true,"HOME"],[768,"Golisopod",7,false,null],[769,"Sandygast",7,false,null],
+  [770,"Palossand",7,false,null],[771,"Pyukumuku",7,false,null],[772,"Type: Null",7,false,null],
+  [773,"Silvally",7,false,null],[775,"Komala",7,false,null],[776,"Turtonator",7,false,null],
+  [777,"Togedemaru",7,false,null],[778,"Mimikyu",7,true,"HOME"],[779,"Bruxish",7,false,null],
+  [780,"Drampa",7,false,null],[781,"Dhelmise",7,false,null],[782,"Jangmo-o",7,true,"begge"],
+  [783,"Hakamo-o",7,true,"GO"],[784,"Kommo-o",7,true,"GO"],[785,"Tapu Koko",7,true,"HOME"],
+  [786,"Tapu Lele",7,false,null],[787,"Tapu Bulu",7,false,null],[788,"Tapu Fini",7,false,null],
+  [789,"Cosmog",7,false,null],[790,"Cosmoem",7,false,null],[791,"Solgaleo",7,false,null],
+  [792,"Lunala",7,true,"HOME"],[793,"Nihilego",7,false,null],[794,"Buzzwole",7,false,null],
+  [795,"Pheromosa",7,false,null],[796,"Xurkitree",7,false,null],[797,"Celesteela",7,false,null],
+  [798,"Kartana",7,false,null],[799,"Guzzlord",7,false,null],[800,"Necrozma",7,true,"HOME"],
+  [801,"Magearna",7,false,null],[802,"Marshadow",7,false,null],[803,"Poipole",7,false,null],
+  [804,"Naganadel",7,false,null],[805,"Stakataka",7,false,null],[806,"Blacephalon",7,false,null],
+  [807,"Zeraora",7,true,"HOME"],[808,"Meltan",10,true,"HOME"],[809,"Melmetal",10,true,"HOME"],
+  // Gen 8
+  [810,"Grookey",8,false,null],[811,"Thwackey",8,false,null],[812,"Rillaboom",8,false,null],
+  [813,"Scorbunny",8,false,null],[814,"Raboot",8,false,null],[815,"Cinderace",8,true,"HOME"],
+  [816,"Sobble",8,false,null],[817,"Drizzile",8,false,null],[818,"Inteleon",8,false,null],
+  [819,"Skwovet",8,true,"HOME"],[820,"Greedent",8,false,null],[821,"Rookidee",8,false,null],
+  [822,"Corvisquire",8,false,null],[823,"Corviknight",8,false,null],[824,"Blipbug",8,false,null],
+  [825,"Dottler",8,false,null],[826,"Orbeetle",8,false,null],[827,"Nickit",8,false,null],
+  [828,"Thievul",8,false,null],[829,"Gossifleur",8,false,null],[830,"Eldegoss",8,false,null],
+  [831,"Wooloo",8,false,null],[832,"Dubwool",8,false,null],[833,"Chewtle",8,false,null],
+  [834,"Drednaw",8,false,null],[835,"Yamper",8,false,null],[836,"Boltund",8,false,null],
+  [837,"Rolycoly",8,false,null],[838,"Carkol",8,false,null],[839,"Coalossal",8,false,null],
+  [840,"Applin",8,false,null],[841,"Flapple",8,true,"HOME"],[842,"Appletun",8,false,null],
+  [843,"Silicobra",8,false,null],[844,"Sandaconda",8,false,null],[845,"Cramorant",8,false,null],
+  [846,"Arrokuda",8,false,null],[847,"Barraskewda",8,false,null],[848,"Toxel",8,false,null],
+  [850,"Sizzlipede",8,false,null],[851,"Centiskorch",8,false,null],[852,"Clobbopus",8,false,null],
+  [853,"Grapploct",8,false,null],[854,"Sinistea",8,false,null],[855,"Polteageist",8,false,null],
+  [856,"Hatenna",8,false,null],[857,"Hattrem",8,false,null],[858,"Hatterene",8,true,"HOME"],
+  [859,"Impidimp",8,false,null],[860,"Morgrem",8,false,null],[861,"Grimmsnarl",8,true,"HOME"],
+  [862,"Obstagoon",8,true,"GO"],[863,"Perrserker",8,false,null],[864,"Cursola",8,false,null],
+  [865,"Sirfetch'd",8,false,null],[866,"Mr. Rime",8,false,null],[867,"Runerigus",8,false,null],
+  [868,"Milcery",8,true,"HOME"],[869,"Alcremie",8,true,"HOME"],[870,"Falinks",8,false,null],
+  [871,"Pincurchin",8,false,null],[872,"Snom",8,false,null],[873,"Frosmoth",8,false,null],
+  [874,"Stonjourner",8,false,null],[878,"Cufant",8,false,null],[879,"Copperajah",8,false,null],
+  [880,"Dracozolt",8,false,null],[881,"Arctozolt",8,false,null],[882,"Dracovish",8,false,null],
+  [883,"Arctovish",8,false,null],[884,"Duraludon",8,true,"HOME"],[885,"Dreepy",8,true,"HOME"],
+  [886,"Drakloak",8,false,null],[887,"Dragapult",8,true,"HOME"],[890,"Eternatus",8,true,"HOME"],
+  [891,"Kubfu",8,false,null],[893,"Zarude",8,false,null],[894,"Regieleki",8,false,null],
+  [895,"Regidrago",8,false,null],[896,"Glastrier",8,false,null],[897,"Spectrier",8,false,null],
+  [898,"Calyrex",8,false,null],[899,"Wyrdeer",8,false,null],[900,"Kleavor",8,false,null],
+  [901,"Ursaluna",8,true,"GO"],[903,"Sneasler",8,false,null],[904,"Overqwil",8,true,"GO"],
+  // Gen 9
+  [906,"Sprigatito",9,true,"GO"],[907,"Floragato",9,true,"GO"],[908,"Meowscarada",9,true,"GO"],
+  [909,"Fuecoco",9,true,"GO"],[910,"Crocalor",9,false,null],[911,"Skeledirge",9,false,null],
+  [912,"Quaxly",9,false,null],[913,"Quaxwell",9,false,null],[914,"Quaquaval",9,false,null],
+  [915,"Lechonk",9,true,"HOME"],[917,"Tarountula",9,false,null],[918,"Spidops",9,false,null],
+  [919,"Nymble",9,false,null],[920,"Lokix",9,false,null],[921,"Pawmi",9,true,"HOME"],
+  [922,"Pawmo",9,false,null],[923,"Pawmot",9,false,null],[924,"Tandemaus",9,true,"GO"],
+  [926,"Fidough",9,false,null],[927,"Dachsbun",9,false,null],[928,"Smoliv",9,false,null],
+  [929,"Dolliv",9,false,null],[930,"Arboliva",9,false,null],[932,"Nacli",9,false,null],
+  [933,"Naclstack",9,false,null],[934,"Garganacl",9,true,"HOME"],[935,"Charcadet",9,true,"HOME"],
+  [936,"Armarouge",9,false,null],[937,"Ceruledge",9,false,null],[938,"Tadbulb",9,false,null],
+  [939,"Bellibolt",9,false,null],[940,"Wattrel",9,false,null],[941,"Kilowattrel",9,false,null],
+  [942,"Maschiff",9,false,null],[943,"Mabosstiff",9,false,null],[944,"Shroodle",9,true,"HOME"],
+  [945,"Grafaiai",9,true,"HOME"],[946,"Bramblin",9,false,null],[947,"Brambleghast",9,false,null],
+  [948,"Toedscool",9,true,"HOME"],[949,"Toedscruel",9,false,null],[950,"Klawf",9,true,"HOME"],
+  [951,"Capsakid",9,true,"HOME"],[952,"Scovillain",9,false,null],[953,"Rellor",9,true,"HOME"],
+  [954,"Rabsca",9,false,null],[955,"Flittle",9,true,"HOME"],[956,"Espathra",9,false,null],
+  [957,"Tinkatink",9,false,null],[958,"Tinkatuff",9,false,null],[959,"Tinkaton",9,false,null],
+  [960,"Wiglett",9,false,null],[961,"Wugtrio",9,true,"HOME"],[962,"Bombirdier",9,false,null],
+  [963,"Finizen",9,true,"HOME"],[965,"Varoom",9,true,"HOME"],[966,"Revavroom",9,true,"HOME"],
+  [967,"Cyclizar",9,false,null],[968,"Orthworm",9,true,"HOME"],[969,"Glimmet",9,false,null],
+  [970,"Glimmora",9,false,null],[971,"Greavard",9,true,"HOME"],[972,"Houndstone",9,false,null],
+  [973,"Flamigo",9,false,null],[974,"Cetoddle",9,false,null],[975,"Cetitan",9,true,"HOME"],
+  [976,"Veluza",9,false,null],[977,"Dondozo",9,true,"HOME"],[979,"Annihilape",9,false,null],
+  [980,"Clodsire",9,false,null],[981,"Farigiraf",9,true,"HOME"],[983,"Kingambit",9,true,"HOME"],
+  [984,"Great Tusk",9,false,null],[985,"Scream Tail",9,false,null],[986,"Brute Bonnet",9,false,null],
+  [987,"Flutter Mane",9,false,null],[988,"Slither Wing",9,false,null],[989,"Sandy Shocks",9,false,null],
+  [990,"Iron Treads",9,false,null],[991,"Iron Bundle",9,false,null],[992,"Iron Hands",9,false,null],
+  [993,"Iron Jugulis",9,false,null],[994,"Iron Moth",9,false,null],[995,"Iron Thorns",9,false,null],
+  [996,"Frigibax",9,true,"HOME"],[997,"Arctibax",9,false,null],[998,"Baxcalibur",9,false,null],
+  [1000,"Gholdengo",9,false,null],[1001,"Wo-Chien",9,true,"HOME"],[1002,"Chien-Pao",9,true,"HOME"],
+  [1003,"Ting-Lu",9,true,"HOME"],[1004,"Chi-Yu",9,true,"HOME"],[1005,"Roaring Moon",9,false,null],
+  [1006,"Iron Valiant",9,false,null],[1007,"Koraidon",9,false,null],[1008,"Miraidon",9,false,null],
+  [1009,"Walking Wake",9,false,null],[1010,"Iron Leaves",9,false,null],[1011,"Dipplin",9,true,"HOME"],
+  [1012,"Poltchageist",9,false,null],[1013,"Sinistcha",9,false,null],[1014,"Okidogi",9,false,null],
+  [1015,"Munkidori",9,false,null],[1016,"Fezandipiti",9,false,null],[1018,"Archaludon",9,false,null],
+  [1019,"Hydrapple",9,false,null],[1020,"Gouging Fire",9,false,null],[1021,"Raging Bolt",9,false,null],
+  [1022,"Iron Boulder",9,false,null],[1023,"Iron Crown",9,false,null],[1025,"Pecharunt",9,false,null],
 ];
 
 // Build lookup: dexNum -> base object
@@ -1906,9 +2177,7 @@ const GEN_TAB_IDS = ["1","2","3","4","5","6","7","8","9","special"];
 
 function ShinyTrackerApp({ t, onBack, embedded }) {
   const isDark = t.bg === "#0d1117";
-  const [userData, setUserData] = useState({}); // { [num]: pokemon data, "v:id": variant data, __timer }
-  const [view, setView] = useState("hoved"); // "hoved" | "varianter"
-  const [varCatFilter, setVarCatFilter] = useState("alle");
+  const [userData, setUserData] = useState({}); // { [num]: { inHome, hunting, source, hasShiny } }
   const [loaded, setLoaded] = useState(false);
   const [genTab, setGenTab] = useState("alle");
   const [filter, setFilter] = useState("alle");
@@ -2027,41 +2296,6 @@ function ShinyTrackerApp({ t, onBack, embedded }) {
     save({ ...userData, [num]: { ...cur, source: src } });
   }
 
-  // ── Variant helpers ──
-  function getVariantEffective(vid) {
-    const base = SHINY_VARIANTS.find(v => v[0] === vid);
-    const ud = userData["v:" + vid] || {};
-    return {
-      id: vid,
-      name: base ? base[1] : vid,
-      gen: base ? base[2] : 0,
-      category: base ? base[3] : "forme",
-      hasShiny: ud.hasShiny !== undefined ? ud.hasShiny : false,
-      source: ud.source !== undefined ? ud.source : null,
-      inHome: ud.inHome !== undefined ? ud.inHome : false,
-      hunting: ud.hunting || false,
-    };
-  }
-
-  function toggleVariantHasShiny(vid) {
-    const cur = getVariantEffective(vid);
-    const newVal = !cur.hasShiny;
-    save({ ...userData, ["v:" + vid]: { ...( userData["v:" + vid] || {}), hasShiny: newVal, inHome: newVal ? cur.inHome : false, hunting: newVal ? cur.hunting : false } });
-  }
-  function toggleVariantInHome(vid) {
-    const cur = getVariantEffective(vid);
-    save({ ...userData, ["v:" + vid]: { ...(userData["v:" + vid] || {}), inHome: !cur.inHome } });
-  }
-  function toggleVariantGO(vid) {
-    const cur = getVariantEffective(vid);
-    const isGO = cur.source === "GO" || cur.source === "begge";
-    save({ ...userData, ["v:" + vid]: { ...(userData["v:" + vid] || {}), source: isGO ? null : "GO" } });
-  }
-  function toggleVariantHunting(vid) {
-    const cur = getVariantEffective(vid);
-    save({ ...userData, ["v:" + vid]: { ...(userData["v:" + vid] || {}), hunting: !cur.hunting } });
-  }
-
   function baseInHome(base) {
     return base && base.hasShiny && (base.source === "HOME" || base.source === "begge");
   }
@@ -2127,22 +2361,6 @@ function ShinyTrackerApp({ t, onBack, embedded }) {
       return p.name.toLowerCase().includes(search.toLowerCase()) ||
              String(p.num).includes(search);
     });
-
-  // ── Variant filtered list ──
-  const allVariants = SHINY_VARIANTS.map(v => getVariantEffective(v[0]));
-  const filteredVariants = allVariants.filter(v => {
-    if (varCatFilter !== "alle" && v.category !== varCatFilter) return false;
-    if (filter === "har") return v.hasShiny;
-    if (filter === "mangler") return !v.hasShiny;
-    if (filter === "trenger_home") return v.hasShiny && !v.inHome;
-    if (filter === "jakter") return v.hunting;
-    if (filter === "go") return v.hasShiny && (v.source === "GO" || v.source === "begge") && !v.inHome;
-    if (!search.trim()) return true;
-    return v.name.toLowerCase().includes(search.toLowerCase());
-  }).filter(v => {
-    if (!search.trim()) return true;
-    return v.name.toLowerCase().includes(search.toLowerCase());
-  });
 
   const purple = "#a855f7";
   const purpleDim = isDark ? "#2d1b69" : "#f3e8ff";
@@ -2226,23 +2444,13 @@ function ShinyTrackerApp({ t, onBack, embedded }) {
         </div>
       </div>
 
-      {/* View toggle: Hoved / Varianter */}
-      <div style={{ display: "flex", margin: "12px 20px 0", background: t.surface, border: "1px solid " + t.border, borderRadius: 12, padding: 3, gap: 3 }}>
-        {[["hoved","🏠 Hoveddex"],["varianter","🔄 Varianter"]].map(([id,label]) => (
-          <button key={id} onClick={() => setView(id)}
-            style={{ flex: 1, padding: "7px 10px", borderRadius: 9, border: "none", background: view === id ? (isDark ? "#1f2937" : "#ffffff") : "transparent", color: view === id ? t.text : t.textMuted, fontSize: 13, fontWeight: view === id ? 700 : 500, cursor: "pointer", transition: "background 0.15s" }}>
-            {label}
-          </button>
-        ))}
-      </div>
-
       {/* Search */}
       <div style={{ padding: "12px 20px 0" }}>
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder={view === "varianter" ? "Søk etter variant..." : "Søk etter navn eller #..."}
-          style={{ width: "100%", background: t.surface, border: "1px solid " + t.border, borderRadius: 12, padding: "10px 14px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+          placeholder="Søk etter navn eller #..."
+          style={{ width: "100%", background: t.surface, border: `1px solid ${t.border}`, borderRadius: 12, padding: "10px 14px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
         />
       </div>
 
@@ -2250,286 +2458,115 @@ function ShinyTrackerApp({ t, onBack, embedded }) {
       <div style={{ display: "flex", gap: 6, padding: "10px 20px 0", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         {filterOpts.map(([id, label]) => (
           <button key={id} onClick={() => setFilter(id)}
-            style={{ padding: "6px 12px", borderRadius: 20, border: "1px solid " + (filter === id ? purpleBorder : t.border), background: filter === id ? purpleDim : "transparent", color: filter === id ? purple : t.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+            style={{ padding: "6px 12px", borderRadius: 20, border: `1px solid ${filter === id ? purpleBorder : t.border}`, background: filter === id ? purpleDim : "transparent", color: filter === id ? purple : t.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
             {label}
           </button>
         ))}
       </div>
 
-      {/* Gen tabs (Hoved) or Category tabs (Varianter) */}
-      {view === "hoved" ? (
-        <div style={{ display: "flex", gap: 5, padding: "10px 20px 0", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          {[["alle","Alle"], ...GEN_LABELS.map((l,i) => [GEN_TAB_IDS[i], l])].map(([id, label]) => {
-            const isSpecial = id === "special";
-            const active = genTab === id;
-            const specialColor = isDark ? "#a855f7" : "#9333ea";
-            const specialDim = isDark ? "#2d1b69" : "#f3e8ff";
-            const specialBorder = isDark ? "#6d28d9" : "#c4b5fd";
-            const activeColor = isSpecial ? specialColor : t.blue;
-            const activeDim = isSpecial ? specialDim : t.blueDim;
-            const activeBorder = isSpecial ? specialBorder : t.blueBorder;
-            return (
-              <button key={id} onClick={() => setGenTab(id)}
-                style={{ padding: "6px 11px", borderRadius: 10, border: "1px solid " + (active ? activeBorder : t.border), background: active ? activeDim : "transparent", color: active ? activeColor : t.textMuted, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div style={{ display: "flex", gap: 5, padding: "10px 20px 0", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          {[["alle","Alle"], ...Object.entries(VARIANT_CATEGORY_LABELS).map(([id,label]) => [id,label])].map(([id, label]) => (
-            <button key={id} onClick={() => setVarCatFilter(id)}
-              style={{ padding: "6px 11px", borderRadius: 10, border: "1px solid " + (varCatFilter === id ? purpleBorder : t.border), background: varCatFilter === id ? purpleDim : "transparent", color: varCatFilter === id ? purple : t.textMuted, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+      {/* Gen tabs */}
+      <div style={{ display: "flex", gap: 5, padding: "10px 20px 0", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        {[["alle","Alle"], ...GEN_LABELS.map((l,i) => [GEN_TAB_IDS[i], l])].map(([id, label]) => {
+          const isSpecial = id === "special";
+          const active = genTab === id;
+          const specialColor = isDark ? "#a855f7" : "#9333ea";
+          const specialDim = isDark ? "#2d1b69" : "#f3e8ff";
+          const specialBorder = isDark ? "#6d28d9" : "#c4b5fd";
+          const activeColor = isSpecial ? specialColor : t.blue;
+          const activeDim = isSpecial ? specialDim : t.blueDim;
+          const activeBorder = isSpecial ? specialBorder : t.blueBorder;
+          return (
+            <button key={id} onClick={() => setGenTab(id)}
+              style={{ padding: "6px 11px", borderRadius: 10, border: "1px solid " + (active ? activeBorder : t.border), background: active ? activeDim : "transparent", color: active ? activeColor : t.textMuted, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
               {label}
             </button>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
 
       {/* Count */}
       <div style={{ padding: "10px 20px 4px", fontSize: 12, color: t.textFaint }}>
-        {view === "varianter"
-          ? filteredVariants.length + " varianter"
-          : filter === "go" ? filtered.length + " gjenstår i GO" : filtered.length + " Pokémon"}
+        {filter === "go" ? filtered.length + " gjenstår i GO" : filtered.length + " Pokémon"}
       </div>
 
       {/* List */}
       <div style={{ padding: "0 20px" }}>
-        {view === "hoved" ? filtered.map(p => (
-          <div key={p.num} style={{
-            display: "flex", alignItems: "center", gap: 10,
-            padding: "10px 12px", marginBottom: 6,
-            background: p.hasShiny ? (isDark ? "#161b22" : "#ffffff") : (isDark ? "#0d1117" : "#f9f9f7"),
-            border: "1px solid " + (p.inHome ? t.green + "60" : p.hasShiny ? t.border : (isDark ? "#21262d30" : "#e0e0e0")),
-            borderRadius: 12, opacity: p.hasShiny ? 1 : 0.55,
-          }}>
-            <div style={{ fontSize: 11, color: t.textFaint, minWidth: 32, textAlign: "right", fontFamily: "monospace" }}>#{p.num}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14, fontWeight: p.hasShiny ? 700 : 400, color: p.hasShiny ? t.text : t.textMuted }}>
-                  {p.hasShiny ? "✨ " : ""}{p.name}
-                </span>
-                {p.hasShiny && !p.inHome && (p.source === "GO" || p.source === "begge") && (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.blue, background: t.blueDim, border: "1px solid " + t.blueBorder, borderRadius: 6, padding: "1px 5px" }}>📍 GO</span>
+        {filtered.map(p => {
+          return (
+            <div key={p.num} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 12px", marginBottom: 6,
+              background: p.hasShiny ? (isDark ? "#161b22" : "#ffffff") : (isDark ? "#0d1117" : "#f9f9f7"),
+              border: `1px solid ${p.inHome ? t.green + "60" : p.hasShiny ? t.border : (isDark ? "#21262d30" : "#e0e0e0")}`,
+              borderRadius: 12, opacity: p.hasShiny ? 1 : 0.55,
+            }}>
+              {/* Dex number */}
+              <div style={{ fontSize: 11, color: t.textFaint, minWidth: 32, textAlign: "right", fontFamily: "monospace" }}>#{p.num}</div>
+
+              {/* Name + status badges */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 14, fontWeight: p.hasShiny ? 700 : 400, color: p.hasShiny ? t.text : t.textMuted }}>
+                    {p.hasShiny ? "✨ " : ""}{p.name}
+                  </span>
+                  {p.hasShiny && !p.inHome && (p.source === "GO" || p.source === "begge") && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: t.blue, background: t.blueDim, border: "1px solid " + t.blueBorder, borderRadius: 6, padding: "1px 5px" }}>📍 GO</span>
+                  )}
+                  {p.hunting && !p.hasShiny && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: t.orange, background: t.orangeDim, border: "1px solid " + t.orangeBorder, borderRadius: 6, padding: "1px 5px" }}>🎯 Jakt</span>
+                  )}
+                  {p.hasShiny && p.inHome && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: t.green, background: t.greenDim, border: "1px solid " + t.green + "40", borderRadius: 6, padding: "1px 5px" }}>🏠 HOME</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {/* Hunting toggle (only if no shiny yet) */}
+                {!p.hasShiny && (
+                  <button onClick={() => toggleHunting(p.num)}
+                    title="Jakter denne"
+                    style={{ background: p.hunting ? t.orangeDim : "transparent", border: `1px solid ${p.hunting ? t.orangeBorder : t.border}`, borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    🎯
+                  </button>
                 )}
-                {p.hunting && !p.hasShiny && (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.orange, background: t.orangeDim, border: "1px solid " + t.orangeBorder, borderRadius: 6, padding: "1px 5px" }}>🎯 Jakt</span>
+                {/* Has shiny toggle */}
+                <button onClick={() => toggleHasShiny(p.num)}
+                  title={p.hasShiny ? "Fjern shiny" : "Har shiny"}
+                  style={{ background: p.hasShiny ? purpleDim : "transparent", border: `1px solid ${p.hasShiny ? purpleBorder : t.border}`, borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  ✨
+                </button>
+                {/* GO toggle (only if has shiny and not in HOME) */}
+                {p.hasShiny && !p.inHome && (
+                  <button onClick={() => toggleGO(p.num)}
+                    title={(p.source === "GO" || p.source === "begge") ? "Fjern GO" : "Ligger i GO"}
+                    style={{ background: (p.source === "GO" || p.source === "begge") ? t.blueDim : "transparent", border: "1px solid " + ((p.source === "GO" || p.source === "begge") ? t.blueBorder : t.border), borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    📍
+                  </button>
                 )}
-                {p.hasShiny && p.inHome && (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.green, background: t.greenDim, border: "1px solid " + t.green + "40", borderRadius: 6, padding: "1px 5px" }}>🏠 HOME</span>
+                {/* In HOME toggle (only if has shiny) */}
+                {p.hasShiny && (
+                  <button onClick={() => toggleInHome(p.num)}
+                    title={p.inHome ? "Fjern fra HOME" : "Marker som i HOME"}
+                    style={{ background: p.inHome ? t.greenDim : "transparent", border: `1px solid ${p.inHome ? t.green + "80" : t.border}`, borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    🏠
+                  </button>
                 )}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              {!p.hasShiny && (
-                <button onClick={() => toggleHunting(p.num)} title="Jakter denne"
-                  style={{ background: p.hunting ? t.orangeDim : "transparent", border: "1px solid " + (p.hunting ? t.orangeBorder : t.border), borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>🎯</button>
-              )}
-              <button onClick={() => toggleHasShiny(p.num)} title={p.hasShiny ? "Fjern shiny" : "Har shiny"}
-                style={{ background: p.hasShiny ? purpleDim : "transparent", border: "1px solid " + (p.hasShiny ? purpleBorder : t.border), borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>✨</button>
-              {p.hasShiny && !p.inHome && (
-                <button onClick={() => toggleGO(p.num)} title={(p.source === "GO" || p.source === "begge") ? "Fjern GO" : "Ligger i GO"}
-                  style={{ background: (p.source === "GO" || p.source === "begge") ? t.blueDim : "transparent", border: "1px solid " + ((p.source === "GO" || p.source === "begge") ? t.blueBorder : t.border), borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>📍</button>
-              )}
-              {p.hasShiny && (
-                <button onClick={() => toggleInHome(p.num)} title={p.inHome ? "Fjern fra HOME" : "Marker som i HOME"}
-                  style={{ background: p.inHome ? t.greenDim : "transparent", border: "1px solid " + (p.inHome ? t.green + "80" : t.border), borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>🏠</button>
-              )}
-            </div>
-          </div>
-        )) : filteredVariants.map(v => (
-          <div key={v.id} style={{
-            display: "flex", alignItems: "center", gap: 10,
-            padding: "10px 12px", marginBottom: 6,
-            background: v.hasShiny ? (isDark ? "#161b22" : "#ffffff") : (isDark ? "#0d1117" : "#f9f9f7"),
-            border: "1px solid " + (v.inHome ? t.green + "60" : v.hasShiny ? t.border : (isDark ? "#21262d30" : "#e0e0e0")),
-            borderRadius: 12, opacity: v.hasShiny ? 1 : 0.55,
-          }}>
-            <div style={{ fontSize: 10, color: t.textFaint, minWidth: 32, textAlign: "center" }}>
-              {VARIANT_CATEGORY_LABELS[v.category] ? VARIANT_CATEGORY_LABELS[v.category].split(" ")[0] : "🔄"}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14, fontWeight: v.hasShiny ? 700 : 400, color: v.hasShiny ? t.text : t.textMuted }}>
-                  {v.hasShiny ? "✨ " : ""}{v.name}
-                </span>
-                {v.hasShiny && !v.inHome && (v.source === "GO" || v.source === "begge") && (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.blue, background: t.blueDim, border: "1px solid " + t.blueBorder, borderRadius: 6, padding: "1px 5px" }}>📍 GO</span>
-                )}
-                {v.hunting && !v.hasShiny && (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.orange, background: t.orangeDim, border: "1px solid " + t.orangeBorder, borderRadius: 6, padding: "1px 5px" }}>🎯 Jakt</span>
-                )}
-                {v.hasShiny && v.inHome && (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.green, background: t.greenDim, border: "1px solid " + t.green + "40", borderRadius: 6, padding: "1px 5px" }}>🏠 HOME</span>
-                )}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              {!v.hasShiny && (
-                <button onClick={() => toggleVariantHunting(v.id)} title="Jakter denne"
-                  style={{ background: v.hunting ? t.orangeDim : "transparent", border: "1px solid " + (v.hunting ? t.orangeBorder : t.border), borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>🎯</button>
-              )}
-              <button onClick={() => toggleVariantHasShiny(v.id)} title={v.hasShiny ? "Fjern shiny" : "Har shiny"}
-                style={{ background: v.hasShiny ? purpleDim : "transparent", border: "1px solid " + (v.hasShiny ? purpleBorder : t.border), borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>✨</button>
-              {v.hasShiny && !v.inHome && (
-                <button onClick={() => toggleVariantGO(v.id)} title={(v.source === "GO" || v.source === "begge") ? "Fjern GO" : "Ligger i GO"}
-                  style={{ background: (v.source === "GO" || v.source === "begge") ? t.blueDim : "transparent", border: "1px solid " + ((v.source === "GO" || v.source === "begge") ? t.blueBorder : t.border), borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>📍</button>
-              )}
-              {v.hasShiny && (
-                <button onClick={() => toggleVariantInHome(v.id)} title={v.inHome ? "Fjern fra HOME" : "Marker som i HOME"}
-                  style={{ background: v.inHome ? t.greenDim : "transparent", border: "1px solid " + (v.inHome ? t.green + "80" : t.border), borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>🏠</button>
-              )}
-            </div>
-          </div>
-        ))}
-        {((view === "hoved" && filtered.length === 0) || (view === "varianter" && filteredVariants.length === 0)) && (
+          );
+        })}
+        {filtered.length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 20px", color: t.textMuted }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>{filter === "go" ? "🏠" : "✨"}</div>
-            <div>{filter === "go" && view === "hoved" ? "Alle GO-shinies er overflyttet til HOME! 🎉" : "Ingen matcher filteret"}</div>
+            <div>{filter === "go" ? "Alle GO-shinies er overflyttet til HOME! 🎉" : "Ingen Pokémon matcher filteret"}</div>
           </div>
         )}
       </div>
     </div>
   );
 }
-
-
-// ── Shiny Variants ─────────────────────────────────────────────────────────────
-// Storage: gaming:shiny, keys prefixed "v:" e.g. "v:386-atk"
-// category: "alola" | "galar" | "hisui" | "paldea" | "forme"
-// Fields: [id, name, gen, category, hasShiny, source]
-const SHINY_VARIANTS = [
-  // ── Regionale: Alola ──
-  ["al-rattata","Rattata-Alola",1,"alola",false,null],
-  ["al-raticate","Raticate-Alola",1,"alola",false,null],
-  ["al-raichu","Raichu-Alola",1,"alola",true,"HOME"],
-  ["al-sandshrew","Sandshrew-Alola",1,"alola",true,"GO"],
-  ["al-sandslash","Sandslash-Alola",1,"alola",true,"GO"],
-  ["al-vulpix","Vulpix-Alola",1,"alola",true,"GO"],
-  ["al-ninetales","Ninetales-Alola",1,"alola",true,"GO"],
-  ["al-diglett","Diglett-Alola",1,"alola",false,null],
-  ["al-dugtrio","Dugtrio-Alola",1,"alola",false,null],
-  ["al-meowth","Meowth-Alola",1,"alola",true,"GO"],
-  ["al-persian","Persian-Alola",1,"alola",false,null],
-  ["al-geodude","Geodude-Alola",1,"alola",true,"GO"],
-  ["al-graveler","Graveler-Alola",1,"alola",false,null],
-  ["al-golem","Golem-Alola",1,"alola",false,null],
-  ["al-grimer","Grimer-Alola",1,"alola",true,"GO"],
-  ["al-muk","Muk-Alola",1,"alola",true,"GO"],
-  ["al-exeggutor","Exeggutor-Alola",1,"alola",true,"GO"],
-  ["al-marowak","Marowak-Alola",1,"alola",true,"GO"],
-  // ── Regionale: Galar ──
-  ["ga-meowth","Meowth-Galar",1,"galar",false,null],
-  ["ga-ponyta","Ponyta-Galar",1,"galar",true,"HOME"],
-  ["ga-rapidash","Rapidash-Galar",1,"galar",true,"HOME"],
-  ["ga-slowpoke","Slowpoke-Galar",1,"galar",false,null],
-  ["ga-slowbro","Slowbro-Galar",1,"galar",false,null],
-  ["ga-farfetchd","Farfetch'd-Galar",1,"galar",true,"GO"],
-  ["ga-weezing","Weezing-Galar",1,"galar",false,null],
-  ["ga-mrmime","Mr. Mime-Galar",1,"galar",false,null],
-  ["ga-articuno","Articuno-Galar",1,"galar",false,null],
-  ["ga-zapdos","Zapdos-Galar",1,"galar",false,null],
-  ["ga-moltres","Moltres-Galar",1,"galar",false,null],
-  ["ga-slowking","Slowking-Galar",2,"galar",false,null],
-  ["ga-corsola","Corsola-Galar",2,"galar",false,null],
-  ["ga-zigzagoon","Zigzagoon-Galar",3,"galar",true,"GO"],
-  ["ga-linoone","Linoone-Galar",3,"galar",false,null],
-  ["ga-yamask","Yamask-Galar",5,"galar",false,null],
-  ["ga-stunfisk","Stunfisk-Galar",5,"galar",true,"HOME"],
-  // ── Regionale: Hisui ──
-  ["hi-growlithe","Growlithe-Hisui",1,"hisui",false,null],
-  ["hi-arcanine","Arcanine-Hisui",1,"hisui",false,null],
-  ["hi-voltorb","Voltorb-Hisui",1,"hisui",false,null],
-  ["hi-electrode","Electrode-Hisui",1,"hisui",false,null],
-  ["hi-typhlosion","Typhlosion-Hisui",2,"hisui",false,null],
-  ["hi-sneasel","Sneasel-Hisui",2,"hisui",false,null],
-  ["hi-samurott","Samurott-Hisui",5,"hisui",false,null],
-  ["hi-lilligant","Lilligant-Hisui",5,"hisui",false,null],
-  ["hi-zorua","Zorua-Hisui",5,"hisui",false,null],
-  ["hi-zoroark","Zoroark-Hisui",5,"hisui",false,null],
-  ["hi-braviary","Braviary-Hisui",5,"hisui",false,null],
-  ["hi-sliggoo","Sliggoo-Hisui",6,"hisui",false,null],
-  ["hi-goodra","Goodra-Hisui",6,"hisui",false,null],
-  ["hi-avalugg","Avalugg-Hisui",8,"hisui",false,null],
-  ["hi-basculegion-f","Basculegion-Hisui (F)",8,"hisui",false,null],
-  // ── Regionale: Paldea ──
-  ["pa-wooper","Wooper-Paldea",2,"paldea",false,null],
-  // ── Former: Gen 3 ──
-  ["386-atk","Deoxys-Attack",3,"forme",false,null],
-  ["386-def","Deoxys-Defense",3,"forme",false,null],
-  ["386-spd","Deoxys-Speed",3,"forme",false,null],
-  ["412-sandy","Burmy-Sandy",4,"forme",false,null],
-  ["412-trash","Burmy-Trash",4,"forme",false,null],
-  ["413-sandy","Wormadam-Sandy",4,"forme",false,null],
-  ["413-trash","Wormadam-Trash",4,"forme",false,null],
-  // ── Former: Gen 4 ──
-  ["487-origin","Giratina-Origin",4,"forme",false,null],
-  ["492-sky","Shaymin-Sky",4,"forme",false,null],
-  // ── Former: Gen 5 ──
-  ["550-blue","Basculin-Blue",5,"forme",false,null],
-  ["550-white","Basculin-White",5,"forme",false,null],
-  ["555-zen","Darmanitan-Zen",5,"forme",false,null],
-  ["555-galar","Darmanitan-Galar",5,"forme",false,null],
-  ["555-galar-zen","Darmanitan-Galar-Zen",5,"forme",false,null],
-  ["585-spring","Deerling-Spring",5,"forme",false,null],
-  ["585-summer","Deerling-Summer",5,"forme",false,null],
-  ["585-autumn","Deerling-Autumn",5,"forme",false,null],
-  ["586-spring","Sawsbuck-Spring",5,"forme",false,null],
-  ["586-summer","Sawsbuck-Summer",5,"forme",false,null],
-  ["586-autumn","Sawsbuck-Autumn",5,"forme",false,null],
-  ["641-therian","Tornadus-Therian",5,"forme",false,null],
-  ["642-therian","Thundurus-Therian",5,"forme",false,null],
-  ["645-therian","Landorus-Therian",5,"forme",false,null],
-  ["647-resolute","Keldeo-Resolute",5,"forme",false,null],
-  ["648-pirouette","Meloetta-Pirouette",5,"forme",false,null],
-  // ── Former: Gen 6 ──
-  ["678-female","Meowstic-Female",6,"forme",false,null],
-  ["681-blade","Aegislash-Blade",6,"forme",false,null],
-  ["710-small","Pumpkaboo-Small",6,"forme",false,null],
-  ["710-large","Pumpkaboo-Large",6,"forme",false,null],
-  ["710-super","Pumpkaboo-Super",6,"forme",false,null],
-  ["711-small","Gourgeist-Small",6,"forme",false,null],
-  ["711-large","Gourgeist-Large",6,"forme",false,null],
-  ["711-super","Gourgeist-Super",6,"forme",false,null],
-  ["720-unbound","Hoopa-Unbound",6,"forme",false,null],
-  // ── Former: Gen 7 ──
-  ["741-pom","Oricorio-Pom-Pom",7,"forme",false,null],
-  ["741-pau","Oricorio-Pa'u",7,"forme",false,null],
-  ["741-sensu","Oricorio-Sensu",7,"forme",false,null],
-  ["745-midnight","Lycanroc-Midnight",7,"forme",false,null],
-  ["745-dusk","Lycanroc-Dusk",7,"forme",false,null],
-  ["774-meteor","Minior-Meteor",7,"forme",false,null],
-  // ── Former: Gen 8 ──
-  ["849-lowkey","Toxtricity-Low Key",8,"forme",false,null],
-  ["875-noice","Eiscue-No Ice",8,"forme",false,null],
-  ["876-female","Indeedee-Female",8,"forme",false,null],
-  ["877-hangry","Morpeko-Hangry",8,"forme",false,null],
-  ["892-rapid","Urshifu-Rapid Strike",8,"forme",false,null],
-  ["905-therian","Enamorus-Therian",8,"forme",false,null],
-  // ── Former: Gen 9 ──
-  ["916-female","Oinkologne-Female",9,"forme",false,null],
-  ["925-four","Maushold-Four",9,"forme",false,null],
-  ["931-blue","Squawkabilly-Blue",9,"forme",false,null],
-  ["931-yellow","Squawkabilly-Yellow",9,"forme",false,null],
-  ["931-white","Squawkabilly-White",9,"forme",false,null],
-  ["964-hero","Palafin-Hero",9,"forme",false,null],
-  ["978-droopy","Tatsugiri-Droopy",9,"forme",false,null],
-  ["978-stretchy","Tatsugiri-Stretchy",9,"forme",false,null],
-  ["982-three","Dudunsparce-Three-Segment",9,"forme",false,null],
-  ["999-roaming","Gimmighoul-Roaming",9,"forme",false,null],
-  ["1017-cornerstone","Ogerpon-Cornerstone",9,"forme",false,null],
-  ["1017-hearthflame","Ogerpon-Hearthflame",9,"forme",false,null],
-  ["1017-wellspring","Ogerpon-Wellspring",9,"forme",false,null],
-];
-
-const VARIANT_CATEGORY_LABELS = {
-  "alola": "🌺 Alola",
-  "galar": "⚔️ Galar",
-  "hisui": "🏔️ Hisui",
-  "paldea": "🫒 Paldea",
-  "forme": "🔄 Former",
-};
 
 // ── Gaming app ────────────────────────────────────────────────────────────────
 // Storage keys:
@@ -2580,13 +2617,6 @@ function daysUntilRelease(game) {
   return Math.ceil((d - now) / (1000*60*60*24));
 }
 
-function hoursUntilRelease(game) {
-  const d = parseReleaseDate(game);
-  if (!d) return null;
-  const now = new Date();
-  return (d - now) / (1000*60*60);
-}
-
 // ── Extracted components (MUST be outside GamingApp to avoid remount on every render) ──
 
 function GamingScoreInput({ scores, onChange, settings, nostalgi, t }) {
@@ -2621,7 +2651,7 @@ function GamingGameModal({ title, item, setItem, onSave, onClose, onDelete, show
   const total = showScores && item.scores ? calcTotal(item.scores, settings.helhetWeight, item.nostalgi) : null;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 100, padding: "16px 16px 40px", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 100, padding: "16px 16px 40px", overflowY: "auto" }}>
       <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 20, width: "100%", maxWidth: 400, marginTop: 20 }}>
         <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 16, color: t.text }}>{title}</div>
         <div style={{ marginBottom: 10 }}>
@@ -2902,27 +2932,12 @@ function GamingApp({ t, onBack }) {
               <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 12 }}>{nextRelease.platform && nextRelease.platform + " · "}{formatReleaseDate(nextRelease)}</div>
               {(() => {
                 const d = daysUntilRelease(nextRelease);
-                const h = hoursUntilRelease(nextRelease);
-                if (d === 0) return <div style={{ fontSize: 28, fontWeight: 900, color: t.orange }}>I DAG! 🎉</div>;
-                if (h !== null && h <= 24) {
-                  const timer = Math.ceil(h);
-                  return (
-                    <div>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
-                        <span style={{ fontSize: 48, fontWeight: 900, color: t.orange, lineHeight: 1 }}>{timer}</span>
-                        <span style={{ fontSize: 16, color: t.textMuted }}>timer igjen</span>
-                      </div>
-                      <div style={{ fontSize: 12, color: t.textMuted }}>Slippes ved midnatt i natt 🕛</div>
-                    </div>
-                  );
-                }
-                if (d === 1) return <div style={{ fontSize: 28, fontWeight: 900, color: t.orange }}>I MORGEN!</div>;
-                return (
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                    <span style={{ fontSize: 48, fontWeight: 900, color: blue, lineHeight: 1 }}>{d}</span>
-                    <span style={{ fontSize: 16, color: t.textMuted }}>dager igjen</span>
-                  </div>
-                );
+                return d === 0 ? <div style={{ fontSize: 28, fontWeight: 900, color: t.orange }}>I DAG! 🎉</div>
+                  : d === 1 ? <div style={{ fontSize: 28, fontWeight: 900, color: t.orange }}>I MORGEN!</div>
+                  : <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                      <span style={{ fontSize: 48, fontWeight: 900, color: blue, lineHeight: 1 }}>{d}</span>
+                      <span style={{ fontSize: 16, color: t.textMuted }}>dager igjen</span>
+                    </div>;
               })()}
             </div>
           ) : (
@@ -3121,7 +3136,7 @@ function GamingApp({ t, onBack }) {
         }
         function delRel() { removeReleaseFromRegnskap(item.id); saveReleases(releases.filter(r => r.id !== item.id)); setEditRelease(null); }
         return (
-          <div style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 100, padding: "16px 16px 40px", overflowY: "auto" }}>
+          <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 100, padding: "16px 16px 40px", overflowY: "auto" }}>
             <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 20, width: "100%", maxWidth: 400, marginTop: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 16, color: t.text }}>{isEdit ? "Rediger release" : "Ny release"}</div>
               <div style={{ marginBottom: 10 }}>
@@ -3238,8 +3253,8 @@ function GamingApp({ t, onBack }) {
 
       {/* ═══ SETTINGS PANEL ═══ */}
       {showSettingsPanel && (
-        <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setShowSettingsPanel(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "28px 24px 44px", borderTop: `1px solid ${t.border}`, maxHeight: "80vh", overflowY: "auto" }}>
+        <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setShowSettingsPanel(false)}>
+          <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "28px 24px 44px", borderTop: `1px solid ${t.border}`, maxHeight: "80vh", overflowY: "auto" }}>
             <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 20, color: t.text }}>Gaming-innstillinger</div>
 
             {/* Helhetsfølelse-vekt */}
@@ -3905,8 +3920,8 @@ function SettingsModal({ t, darkMode, onToggleDark, onClose }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "28px 24px 44px", borderTop: `1px solid ${t.border}` }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "28px 24px 44px", borderTop: `1px solid ${t.border}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <span style={{ fontWeight: 800, fontSize: 18, color: t.text }}>Innstillinger</span>
           <button onClick={onClose} style={{ background: t.surface2, border: "none", borderRadius: 20, width: 32, height: 32, cursor: "pointer", color: t.textMuted, fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
@@ -4185,8 +4200,8 @@ function GladIDagSettings({ t, settings, onSave, onClose }) {
   const sectionSt = { marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${t.border}` };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85vh", display: "flex", flexDirection: "column", borderTop: `1px solid ${t.border}` }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85vh", display: "flex", flexDirection: "column", borderTop: `1px solid ${t.border}` }}>
 
         {/* Fixed header */}
         <div style={{ padding: "24px 24px 16px", flexShrink: 0 }}>
@@ -4315,6 +4330,7 @@ function GladIDagApp({ t, onBack }) {
   const [text, setText] = useState("");
   const [yesterdayText, setYesterdayText] = useState("");
   const [saved, setSaved] = useState(false);
+  const [savedYesterday, setSavedYesterday] = useState(false);
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [editDate, setEditDate] = useState(null); // date key being edited in calendar
@@ -4534,9 +4550,14 @@ function GladIDagApp({ t, onBack }) {
                 <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 10 }}>{new Date(yesterday + "T12:00:00").toLocaleDateString("nb-NO", { weekday: "long", day: "numeric", month: "long" })}</div>
                 <textarea
                   value={yesterdayText}
-                  onChange={e => { const v = e.target.value; setYesterdayText(v); setEntries(prev => ({ ...prev, [yesterday]: v })); }}
-                  onBlur={e => { const v = e.target.value.trim(); if(v) saveEntries({ ...entries, [yesterday]: v }); }}
+                  onChange={e => setYesterdayText(e.target.value)}
                   rows={3} placeholder="Hva gjorde deg glad i går?" style={{ ...inputSt, fontSize: 13 }} />
+                <button
+                  onClick={() => { const v = yesterdayText.trim(); if (!v) return; saveEntries({ ...entries, [yesterday]: v }); setSavedYesterday(true); setTimeout(() => setSavedYesterday(false), 2000); }}
+                  disabled={!yesterdayText.trim()}
+                  style={{ marginTop: 10, width: "100%", padding: "12px", borderRadius: 12, border: "none", background: yesterdayText.trim() ? t.orange : t.surface2, color: yesterdayText.trim() ? "#fff" : t.textFaint, fontSize: 14, fontWeight: 700, cursor: yesterdayText.trim() ? "pointer" : "default", transition: "background 0.2s" }}>
+                  {savedYesterday ? "✓ Lagret!" : "Lagre"}
+                </button>
               </div>
             )}
 
@@ -4609,8 +4630,8 @@ function GladIDagApp({ t, onBack }) {
 
       {/* Edit modal (from calendar) */}
       {editDate && (
-        <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setEditDate(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "28px 24px 44px", borderTop: `1px solid ${t.border}` }}>
+        <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setEditDate(null)}>
+          <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "28px 24px 44px", borderTop: `1px solid ${t.border}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontWeight: 800, fontSize: 17, color: t.text }}>
                 {new Date(editDate + "T12:00:00").toLocaleDateString("nb-NO", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
@@ -5070,8 +5091,8 @@ function HandlelisteSettings({ t, kategorier, butikker, settings, onSaveKategori
   })() : [];
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "88vh", display: "flex", flexDirection: "column", borderTop: `1px solid ${t.border}` }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "88vh", display: "flex", flexDirection: "column", borderTop: `1px solid ${t.border}` }}>
         <div style={{ padding: "24px 24px 12px", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <span style={{ fontWeight: 800, fontSize: 18, color: t.text }}>Innstillinger – Handleliste</span>
@@ -5316,7 +5337,7 @@ function OlItemModal({ item, kategorier, t, onSave, onDelete, onClose }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: t.surface, borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", width: "100%", maxWidth: 540, maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 22 }}>
@@ -5402,7 +5423,7 @@ function OlSettingsModal({ kategorier, t, onSave, onClose }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: t.surface, borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", width: "100%", maxWidth: 540, maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>Kategorier</div>
@@ -5901,8 +5922,8 @@ function DrommerApp({ t, onBack }) {
 
       {/* Lapp edit modal */}
       {editLapp && (
-        <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setEditLapp(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "28px 24px 44px", borderTop: `1px solid ${t.border}` }}>
+        <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setEditLapp(null)}>
+          <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "28px 24px 44px", borderTop: `1px solid ${t.border}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontWeight: 800, fontSize: 17, color: t.text }}>{editLapp.id ? "Rediger drøm" : "Ny drøm"}</span>
               <button onClick={() => setEditLapp(null)} style={{ background: t.surface2, border: "none", borderRadius: 20, width: 32, height: 32, cursor: "pointer", color: t.textMuted, fontSize: 18 }}>×</button>
@@ -5925,8 +5946,8 @@ function DrommerApp({ t, onBack }) {
 
       {/* Category management modal */}
       {showCatModal && (
-        <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setShowCatModal(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85vh", display: "flex", flexDirection: "column", borderTop: `1px solid ${t.border}` }}>
+        <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setShowCatModal(false)}>
+          <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85vh", display: "flex", flexDirection: "column", borderTop: `1px solid ${t.border}` }}>
             <div style={{ padding: "24px 24px 12px", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontWeight: 800, fontSize: 18, color: t.text }}>Kategorier</span>
               <button onClick={() => setShowCatModal(false)} style={{ background: t.surface2, border: "none", borderRadius: 20, width: 32, height: 32, cursor: "pointer", color: t.textMuted, fontSize: 18 }}>×</button>
@@ -6264,8 +6285,8 @@ function KorVervSettings({ t, kor, verv, onAdd, onRemove, onRename, onMove, onCl
   const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", boxSizing: "border-box" };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85vh", display: "flex", flexDirection: "column", borderTop: `1px solid ${t.border}` }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85vh", display: "flex", flexDirection: "column", borderTop: `1px solid ${t.border}` }}>
         <div style={{ padding: "24px 24px 12px", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontWeight: 800, fontSize: 18, color: t.text }}>Rediger verv</span>
           <button onClick={onClose} style={{ background: t.surface2, border: "none", borderRadius: 20, width: 32, height: 32, cursor: "pointer", color: t.textMuted, fontSize: 18 }}>×</button>
@@ -6337,8 +6358,8 @@ function KorNotater({ t, kor }) {
       <button onClick={() => setEdit({ title: "", body: "" })} style={{ width: "100%", padding: "14px", borderRadius: 14, border: `1.5px dashed ${t.border}`, background: "transparent", color: t.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>+ Nytt notat</button>
 
       {edit && (
-        <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setEdit(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 24px 44px", borderTop: `1px solid ${t.border}` }}>
+        <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setEdit(null)}>
+          <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 24px 44px", borderTop: `1px solid ${t.border}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontWeight: 800, fontSize: 17, color: t.text }}>{edit.id ? "Rediger notat" : "Nytt notat"}</span>
               <button onClick={() => setEdit(null)} style={{ background: t.surface2, border: "none", borderRadius: 20, width: 32, height: 32, cursor: "pointer", color: t.textMuted, fontSize: 18 }}>×</button>
@@ -7520,7 +7541,7 @@ function PinModal({ t, mode, onSuccess, onCancel }) {
   });
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center" }}
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={onCancel}>
       <div onClick={e => e.stopPropagation()}
         style={{
@@ -7663,8 +7684,6 @@ function orgBlankEntry(settings, type) {
     mineOrgasmer: [],
     partnerOrgasmer: [],
     kommentar: "",
-    videoId: null,
-    videoUrl: "",
   };
 }
 
@@ -7974,10 +7993,10 @@ function OrgSettingsModal({ settings, onSave, onClose, t }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 400, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 400, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "88vh", display: "flex", flexDirection: "column", border: `1px solid ${t.border}` }}>
+        className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "88vh", display: "flex", flexDirection: "column", border: `1px solid ${t.border}` }}>
         <div style={{ padding: "20px 20px 12px", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontWeight: 800, fontSize: 17, color: t.text }}>⚙️ Innstillinger</span>
           <div style={{ display: "flex", gap: 10 }}>
@@ -8098,99 +8117,6 @@ function OrgBonerForm({ entry: initEntry, settings, onSave, onCancel, t }) {
 }
 
 // ── Vanlig logg-skjema ─────────────────────────────────────────────────────────
-function OrgVideoVelger({ videoId, videoUrl, onChange, t }) {
-  const [videoer, setVideoer] = useState([]);
-  const [soek, setSoek] = useState("");
-  const [visSoek, setVisSoek] = useState(false);
-  const [nyUrl, setNyUrl] = useState("");
-  const [visNyUrl, setVisNyUrl] = useState(false);
-
-  useEffect(() => {
-    try { const r = localStorage.getItem("hemmelig:favorittvideoer"); if (r) setVideoer(JSON.parse(r)); } catch(_) {}
-  }, []);
-
-  const valgtVideo = videoer.find(v => v.id === videoId) || null;
-  const filtrert = videoer.filter(v => !soek || v.beskrivelse.toLowerCase().includes(soek.toLowerCase()));
-
-  function velgVideo(v) {
-    onChange(v.id, v.url);
-    setVisSoek(false);
-    setSoek("");
-  }
-  function fjern() { onChange(null, ""); setNyUrl(""); setVisNyUrl(false); }
-
-  function lagreNyUrl() {
-    if (!nyUrl.trim()) return;
-    onChange(null, nyUrl.trim());
-    setVisNyUrl(false);
-  }
-
-  const sectionSt = { background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, padding: 18, marginBottom: 16 };
-  const labelSt = { fontSize: 12, color: t.textMuted, marginBottom: 8, display: "block", fontWeight: 600, letterSpacing: 0.5 };
-  const inputSt = { width: "100%", background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 12px", color: t.text, fontSize: 14, boxSizing: "border-box", outline: "none" };
-
-  return (
-    <div style={sectionSt}>
-      <label style={labelSt}>🎬 Video jeg kom til</label>
-
-      {(valgtVideo || videoUrl) ? (
-        <div style={{ background: t.bg, border: `1px solid ${t.purple}`, borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
-          <div style={{ flex: 1 }}>
-            {valgtVideo ? (
-              <>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 2 }}>{valgtVideo.beskrivelse}</div>
-                <div style={{ fontSize: 11, color: t.textFaint }}>🔗 {valgtVideo.url ? new URL(valgtVideo.url).hostname.replace(/^www\./, "") : ""}</div>
-              </>
-            ) : (
-              <div style={{ fontSize: 13, color: t.text, wordBreak: "break-all" }}>🔗 {videoUrl}</div>
-            )}
-          </div>
-          <button onClick={fjern} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, padding: 0, flexShrink: 0 }}>×</button>
-        </div>
-      ) : (
-        <div>
-          <div style={{ display: "flex", gap: 8, marginBottom: visSoek || visNyUrl ? 10 : 0 }}>
-            <button onClick={() => { setVisSoek(!visSoek); setVisNyUrl(false); }}
-              style={{ flex: 1, padding: "9px", borderRadius: 10, border: `1px solid ${visSoek ? t.purple : t.border}`, background: visSoek ? t.purpleDim : t.bg, color: visSoek ? t.purple : t.textMuted, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-              📋 Velg fra lista
-            </button>
-            <button onClick={() => { setVisNyUrl(!visNyUrl); setVisSoek(false); }}
-              style={{ flex: 1, padding: "9px", borderRadius: 10, border: `1px solid ${visNyUrl ? t.purple : t.border}`, background: visNyUrl ? t.purpleDim : t.bg, color: visNyUrl ? t.purple : t.textMuted, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-              🔗 Lim inn URL
-            </button>
-          </div>
-
-          {visSoek && (
-            <div>
-              <input value={soek} onChange={e => setSoek(e.target.value)} placeholder="Søk i videoer..."
-                style={{ ...inputSt, marginBottom: 8 }} />
-              <div style={{ maxHeight: 200, overflowY: "auto" }}>
-                {filtrert.length === 0 && <div style={{ fontSize: 13, color: t.textFaint, textAlign: "center", padding: 12 }}>Ingen videoer funnet</div>}
-                {filtrert.map(v => (
-                  <button key={v.id} onClick={() => velgVideo(v)}
-                    style={{ width: "100%", background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6, textAlign: "left", cursor: "pointer" }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{(v.kategorier||[]).includes("Favoritt") ? "★ " : ""}{v.beskrivelse}</div>
-                    <div style={{ fontSize: 11, color: t.textFaint, marginTop: 2 }}>⭐ {v.helhet} 🔥 {v.intensitet} 💜 {v.tenner}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {visNyUrl && (
-            <div style={{ display: "flex", gap: 8 }}>
-              <input value={nyUrl} onChange={e => setNyUrl(e.target.value)} placeholder="https://..."
-                style={{ ...inputSt, flex: 1 }} />
-              <button onClick={lagreNyUrl}
-                style={{ padding: "9px 14px", borderRadius: 10, border: "none", background: t.purple, color: "#fff", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>OK</button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function OrgLoggForm({ entry: initEntry, settings, onSave, onCancel, t }) {
   const [e, setE] = useState(initEntry);
   // isBoner toggle
@@ -8510,12 +8436,6 @@ function OrgLoggForm({ entry: initEntry, settings, onSave, onCancel, t }) {
             placeholder="Tanker, refleksjoner, hva som funka eller ikke..."
             style={{ ...inputSt, minHeight: 80, resize: "vertical" }} />
         </div>
-
-        {/* Video */}
-        <OrgVideoVelger
-          videoId={e.videoId||null} videoUrl={e.videoUrl||""}
-          onChange={(videoId, videoUrl) => { upd("videoId", videoId); upd("videoUrl", videoUrl); }}
-          t={t} />
       </div>
     </div>
   );
@@ -8719,112 +8639,6 @@ function OrgStatistikk({ logg, t }) {
 }
 
 // ── Detalj-visning ─────────────────────────────────────────────────────────────
-function OrgVideoKort({ videoId, videoUrl, t }) {
-  const [video, setVideo] = useState(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const scaleColors = ["","#ef4444","#f97316","#eab308","#22c55e","#c084fc"];
-
-  useEffect(() => {
-    try {
-      const videoer = JSON.parse(localStorage.getItem("hemmelig:favorittvideoer") || "[]");
-      if (videoId) {
-        setVideo(videoer.find(v => v.id === videoId) || null);
-      } else if (videoUrl) {
-        setVideo(videoer.find(v => v.url === videoUrl) || { url: videoUrl, beskrivelse: null, _ny: true });
-      }
-    } catch(_) {}
-  }, [videoId, videoUrl]);
-
-  if (!video && !videoUrl) return null;
-
-  const url = video?.url || videoUrl;
-  const domain = url ? (() => { try { return new URL(url).hostname.replace(/^www\./,""); } catch(_) { return url; } })() : "";
-  const snitt = video && video.helhet ? ((video.helhet + video.intensitet + video.tenner) / 3) : null;
-  const snittFarge = snitt >= 4.5 ? "#c084fc" : snitt >= 3.5 ? "#22c55e" : snitt >= 2.5 ? "#eab308" : "#f97316";
-  const erFavoritt = (video?.kategorier || []).includes("Favoritt");
-
-  function handleSaveEdit(oppdatert) {
-    try {
-      const videoer = JSON.parse(localStorage.getItem("hemmelig:favorittvideoer") || "[]");
-      const finnes = videoer.find(v => v.id === oppdatert.id);
-      const updated = finnes
-        ? videoer.map(v => v.id === oppdatert.id ? oppdatert : v)
-        : [oppdatert, ...videoer];
-      localStorage.setItem("hemmelig:favorittvideoer", JSON.stringify(updated));
-      setVideo(oppdatert);
-    } catch(_) {}
-    setShowEditModal(false);
-  }
-
-  const fvSettings = (() => { try { const r = localStorage.getItem("hemmelig:favorittvideoer:settings"); return r ? JSON.parse(r) : null; } catch(_) { return null; } })();
-  const kategoriGrupper = fvSettings?.kategorier || [];
-
-  return (
-    <>
-      <div style={{ background: t.surface, border: `2px solid ${erFavoritt ? "#f59e0b" : t.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>🎬 Video jeg kom til</div>
-            {video?.beskrivelse ? (
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, lineHeight: 1.5 }}>
-                {erFavoritt && <span style={{ color: "#f59e0b", marginRight: 5 }}>★</span>}
-                {video.beskrivelse}
-              </div>
-            ) : (
-              <div style={{ fontSize: 13, color: t.textMuted, fontStyle: "italic" }}>Ingen beskrivelse ennå</div>
-            )}
-          </div>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            {(video?._ny || !videoId) && (
-              <button onClick={() => setShowEditModal(true)}
-                style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: t.bg, color: t.textMuted, fontSize: 12, cursor: "pointer" }}>✏️ Rediger</button>
-            )}
-            {url && (
-              <button onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
-                style={{ padding: "5px 12px", borderRadius: 8, border: "none", background: t.pink, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>▶ Åpne</button>
-            )}
-          </div>
-        </div>
-
-        {video?.kategorier?.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-            {video.kategorier.map(k => (
-              <span key={k} style={{ fontSize: 11, color: k === "Favoritt" ? "#f59e0b" : t.pink, background: k === "Favoritt" ? "#f59e0b22" : t.pinkDim, padding: "2px 8px", borderRadius: 20 }}>
-                {k === "Favoritt" ? "★ Favoritt" : k}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          {domain && <span style={{ fontSize: 12, color: t.textFaint }}>🔗 {domain}</span>}
-          {video?.helhet && <>
-            <span style={{ fontSize: 12, color: scaleColors[video.helhet], fontWeight: 700 }}>⭐ {video.helhet}</span>
-            <span style={{ fontSize: 12, color: scaleColors[video.intensitet] }}>🔥 {video.intensitet}</span>
-            <span style={{ fontSize: 12, color: scaleColors[video.tenner] }}>💜 {video.tenner}</span>
-          </>}
-          {snitt && (
-            <span style={{ fontSize: 12, fontWeight: 700, color: snittFarge, background: snittFarge + "22", padding: "2px 8px", borderRadius: 20 }}>{snitt.toFixed(1)}</span>
-          )}
-          {video?.komTil > 0 && (
-            <span style={{ fontSize: 12, color: "#a855f7", fontWeight: 700 }}>💦 Kom {video.komTil}× til denne</span>
-          )}
-        </div>
-      </div>
-
-      {showEditModal && (
-        <FvModal
-          entry={video?._ny ? null : video}
-          onSave={handleSaveEdit}
-          onClose={() => setShowEditModal(false)}
-          t={t}
-          kategorier={kategoriGrupper}
-        />
-      )}
-    </>
-  );
-}
-
 function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t }) {
   const mengdeEmoji = { "Ingenting": "💧", "Lite": "💦", "Medium": "💦💦", "Masse": "🌊" };
   const energiColor = { "Ga opp": "#ef4444", "Tungt": "#f97316", "Medium": "#eab308", "Lett": "#22c55e", "Alt for lett": "#3b82f6" };
@@ -8889,11 +8703,6 @@ function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t 
             <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14 }}>
               <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>Kommentar</div>
               <div style={{ fontSize: 14, color: t.text, lineHeight: 1.6 }}>{entry.kommentar}</div>
-            </div>
-          )}
-          {(entry.videoId || entry.videoUrl) && (
-            <div style={{ marginTop: 14 }}>
-              <OrgVideoKort videoId={entry.videoId} videoUrl={entry.videoUrl} t={t} />
             </div>
           )}
         </>) : (<>
@@ -9035,9 +8844,6 @@ function OrgLoggDetalj({ entry, settings, partnere, onBack, onEdit, onDelete, t 
               <div style={{ fontSize: 14, color: t.text, lineHeight: 1.6 }}>{entry.kommentar}</div>
             </div>
           )}
-          {(entry.videoId || entry.videoUrl) && (
-            <OrgVideoKort videoId={entry.videoId} videoUrl={entry.videoUrl} t={t} />
-          )}
         </>)}
       </div>
     </div>
@@ -9069,40 +8875,6 @@ function OrgasmekalenderApp({ t, onBack }) {
     const existing = logg.find(e => e.id === entry.id);
     if (existing) saveLogg(logg.map(e => e.id===entry.id ? entry : e));
     else saveLogg([entry, ...logg]);
-
-    // Oppdater videolista hvis video er valgt
-    if (entry.videoId || entry.videoUrl) {
-      try {
-        const videoer = JSON.parse(localStorage.getItem("hemmelig:favorittvideoer") || "[]");
-        const alleLogg = existing
-          ? logg.map(e => e.id===entry.id ? entry : e)
-          : [entry, ...logg];
-
-        if (entry.videoId) {
-          // Tell opp antall ganger fra loggen
-          const antall = alleLogg.filter(e => e.videoId === entry.videoId).length;
-          const oppdatert = videoer.map(v => {
-            if (v.id !== entry.videoId) return v;
-            const kats = [...new Set([...(v.kategorier||[]), "Disse kom jeg til"])];
-            return { ...v, kategorier: kats, komTil: antall };
-          });
-          localStorage.setItem("hemmelig:favorittvideoer", JSON.stringify(oppdatert));
-        } else if (entry.videoUrl && !existing) {
-          // Ny URL — legg til som ny video med kategori
-          const nyVideo = {
-            id: "fv" + Date.now(),
-            url: entry.videoUrl,
-            beskrivelse: "Video fra " + entry.dato,
-            kategorier: ["Disse kom jeg til"],
-            helhet: 3, intensitet: 3, tenner: 3,
-            komTil: 1,
-            createdAt: Date.now(),
-          };
-          localStorage.setItem("hemmelig:favorittvideoer", JSON.stringify([nyVideo, ...videoer]));
-        }
-      } catch(_) {}
-    }
-
     setShowForm(false); setEditEntry(null);
   }
 
@@ -9587,8 +9359,8 @@ function BcImportModal({ liste, onImport, onClose, t }) {
   const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "88vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 6 }}>📥 Importer liste</div>
         <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 20, lineHeight: 1.6 }}>
           Lim inn navn — ett per linje. Du kan eventuelt legge til dato etter et komma.<br />
@@ -11519,10 +11291,10 @@ function JgGaveForm({ gave: init, onSave, onDelete, onCancel, t }) {
   const inputSt = { width: "100%", background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 12px", color: t.text, fontSize: 14, boxSizing: "border-box" };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={onCancel}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "88vh", overflowY: "auto", padding: "24px 20px 44px", border: `1px solid ${t.border}` }}>
+        className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "88vh", overflowY: "auto", padding: "24px 20px 44px", border: `1px solid ${t.border}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
           <span style={{ fontWeight: 800, fontSize: 17, color: t.text }}>🎁 Gave til {g.mottaker}</span>
           <button onClick={onCancel} style={{ background: "none", border: "none", color: t.textMuted, fontSize: 20, cursor: "pointer" }}>✕</button>
@@ -11807,8 +11579,8 @@ function SexlystModal({ entry, onSave, onClose, t }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "90vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>{entry ? "Rediger innlegg" : "Nytt daglig check-in"}</div>
 
         <div style={{ marginBottom: 16 }}>
@@ -12059,8 +11831,8 @@ function STIModal({ entry, onSave, onClose, t }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "88vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>{entry ? "Rediger test" : "Ny STI-test"}</div>
 
         <div style={{ marginBottom: 16 }}>
@@ -12233,8 +12005,8 @@ function VelvareModal({ entry, onSave, onClose, t }) {
   const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "92vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>Daglig check-in</div>
         <div style={{ marginBottom: 20 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: t.textMuted, display: "block", marginBottom: 6 }}>Dato</span>
@@ -12477,8 +12249,8 @@ function SosialeMaalModal({ maal, onSave, onClose, t }) {
   const kats = [["ambisjon","🎯 Ambisjon"],["vane","🔄 Vane"],["grense","🛑 Grense"],["onske","💫 Ønske"]];
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>{maal ? "Rediger mål" : "Nytt sosialt mål"}</div>
         <div style={{ marginBottom: 16 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: t.textMuted, display: "block", marginBottom: 6 }}>Mål / vane</span>
@@ -12810,8 +12582,8 @@ function PassordSettingsModal({ settings, onSave, onClose, t }) {
   const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", flex: 1, boxSizing: "border-box" };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "85vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 4 }}>⚙️ Kategorier</div>
         <div style={{ fontSize: 13, color: t.textFaint, marginBottom: 16 }}>Dra i ⠿ for å endre rekkefølge.</div>
 
@@ -12854,8 +12626,8 @@ function PassordModal({ entry, onSave, onClose, t, kategorier }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "88vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>{entry ? "Rediger oppføring" : "Ny oppføring"}</div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
@@ -13032,8 +12804,8 @@ function BankkortModal({ entry, onSave, onClose, t, kategorier }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "92vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>{entry ? "Rediger bankkort" : "Nytt bankkort"}</div>
 
         <div style={{ marginBottom: 14 }}>
@@ -13195,8 +12967,8 @@ function PassModal({ entry, onSave, onClose, t, kategorier }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "88vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>{entry ? "Rediger pass" : "Nytt pass"}</div>
 
         <div style={{ marginBottom: 14 }}>
@@ -13304,8 +13076,8 @@ function PassKort({ entry, t, onEdit, onDelete }) {
 
 function NyTypeVelger({ onVelg, onClose, t }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>Hva vil du legge til?</div>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={() => onVelg("passord")}
@@ -13376,8 +13148,8 @@ function PassordImportModal({ onImport, onClose, t }) {
   const parsed = tekst.trim() ? parseBlokker(tekst) : [];
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "90vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 6 }}>📥 Importer passord</div>
         <div style={{ fontSize: 13, color: t.textMuted, marginBottom: 8, lineHeight: 1.6 }}>Tre linjer per oppføring, én blank linje mellom:</div>
         <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontFamily: "monospace", fontSize: 13, color: t.textFaint, lineHeight: 1.9 }}>
@@ -13667,8 +13439,8 @@ function FvModal({ entry, onSave, onClose, t, kategorier }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "92vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>{entry ? "Rediger video" : "Legg til video"}</div>
 
         <div style={{ marginBottom: 14 }}>
@@ -13720,11 +13492,10 @@ function FvModal({ entry, onSave, onClose, t, kategorier }) {
 }
 
 function FvKort({ video, t, onEdit, onDelete }) {
-  const harRating = video.helhet != null && video.intensitet != null && video.tenner != null;
-  const snitt = harRating ? ((video.helhet + video.intensitet + video.tenner) / 3) : null;
-  const snittStr = snitt != null ? snitt.toFixed(1) : "–";
+  const snitt = ((video.helhet + video.intensitet + video.tenner) / 3);
+  const snittStr = snitt.toFixed(1);
   const scaleColors = ["","#ef4444","#f97316","#eab308","#22c55e","#c084fc"];
-  const snittFarge = snitt == null ? t.border : snitt >= 4.5 ? "#c084fc" : snitt >= 3.5 ? "#22c55e" : snitt >= 2.5 ? "#eab308" : "#f97316";
+  const snittFarge = snitt >= 4.5 ? "#c084fc" : snitt >= 3.5 ? "#22c55e" : snitt >= 2.5 ? "#eab308" : "#f97316";
   const erFavoritt = (video.kategorier || []).includes("Favoritt");
 
   function aapne() { window.open(video.url, "_blank", "noopener,noreferrer"); }
@@ -13735,15 +13506,13 @@ function FvKort({ video, t, onEdit, onDelete }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: t.text, lineHeight: 1.5, flex: 1 }}>
             {erFavoritt && <span style={{ color: "#f59e0b", marginRight: 5 }}>★</span>}
-            {video.beskrivelse || <span style={{ color: t.textFaint, fontStyle: "italic" }}>Ingen beskrivelse</span>}
+            {video.beskrivelse}
           </div>
-          {harRating && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0,
-              background: snittFarge + "22", border: `2px solid ${snittFarge}`, borderRadius: 10, padding: "4px 10px", minWidth: 44 }}>
-              <span style={{ fontSize: 18, fontWeight: 900, color: snittFarge, lineHeight: 1 }}>{snittStr}</span>
-              <span style={{ fontSize: 9, color: snittFarge, fontWeight: 700, letterSpacing: 0.5 }}>SCORE</span>
-            </div>
-          )}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0,
+            background: snittFarge + "22", border: `2px solid ${snittFarge}`, borderRadius: 10, padding: "4px 10px", minWidth: 44 }}>
+            <span style={{ fontSize: 18, fontWeight: 900, color: snittFarge, lineHeight: 1 }}>{snittStr}</span>
+            <span style={{ fontSize: 9, color: snittFarge, fontWeight: 700, letterSpacing: 0.5 }}>SCORE</span>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
           {(video.kategorier || []).map(k => (
@@ -13754,14 +13523,9 @@ function FvKort({ video, t, onEdit, onDelete }) {
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <span style={{ fontSize: 12, color: t.textFaint }}>🔗 {fvDomain(video.url)}</span>
-          {harRating && <>
-            <span style={{ fontSize: 12, color: scaleColors[video.helhet], fontWeight: 700 }}>⭐ {video.helhet}</span>
-            <span style={{ fontSize: 12, color: scaleColors[video.intensitet] }}>🔥 {video.intensitet}</span>
-            <span style={{ fontSize: 12, color: scaleColors[video.tenner] }}>💜 {video.tenner}</span>
-          </>}
-          {video.komTil > 0 && (
-            <span style={{ fontSize: 12, color: "#a855f7", fontWeight: 700 }}>💦 {video.komTil}×</span>
-          )}
+          <span style={{ fontSize: 12, color: scaleColors[video.helhet], fontWeight: 700 }}>⭐ {video.helhet}</span>
+          <span style={{ fontSize: 12, color: scaleColors[video.intensitet] }}>🔥 {video.intensitet}</span>
+          <span style={{ fontSize: 12, color: scaleColors[video.tenner] }}>💜 {video.tenner}</span>
         </div>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
@@ -13897,8 +13661,8 @@ function FvSettingsModal({ settings, onSave, onClose, t }) {
   const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", flex: 1, boxSizing: "border-box" };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "92vh", overflowY: "auto" }}>
+    <div className="lh-overlay-bg" style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="lh-modal-in" style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 4 }}>⚙️ Kategorier</div>
         <div style={{ fontSize: 13, color: t.textFaint, marginBottom: 16 }}>Dra i ⠿ for å endre rekkefølge på grupper og underkategorier.</div>
 
@@ -13964,7 +13728,6 @@ function FavorittvideoApp({ t, onBack }) {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("dato");
   const [visning, setVisning] = useState("kategorier");
-  const [hovedTab, setHovedTab] = useState("videoer");
 
   useEffect(() => {
     setVideoer(loadFavorittvideoer());
@@ -13986,33 +13749,25 @@ function FavorittvideoApp({ t, onBack }) {
     setSettings(s); saveFvSettings(s); setShowSettings(false);
   }
 
-  function aapneRandom() {
-    const medUrl = videoer.filter(v => v.url);
-    if (medUrl.length === 0) return;
-    const tilfeldig = medUrl[Math.floor(Math.random() * medUrl.length)];
-    window.open(tilfeldig.url, "_blank", "noopener,noreferrer");
-  }
+  const snittScore = v => (v.helhet + v.intensitet + v.tenner) / 3;
   const erFavoritt = v => (v.kategorier || []).includes("Favoritt");
-  const snittScore = v => v.helhet != null && v.intensitet != null && v.tenner != null
-    ? (v.helhet + v.intensitet + v.tenner) / 3
-    : -1;
-  const scoreSort = ["snitt","helhet","intensitet","tenner","komtil"].includes(sort);
+  const scoreSort = ["snitt","helhet","intensitet","tenner"].includes(sort);
 
   const filtered = videoer.filter(v => !search ||
-    (v.beskrivelse || "").toLowerCase().includes(search.toLowerCase()) ||
-    fvDomain(v.url || "").toLowerCase().includes(search.toLowerCase()));
+    v.beskrivelse.toLowerCase().includes(search.toLowerCase()) ||
+    fvDomain(v.url).toLowerCase().includes(search.toLowerCase()));
 
   const sorted = [...filtered].sort((a, b) => {
+    // Ved score-sortering: favoritter alltid over resten
     if (scoreSort) {
       const aFav = erFavoritt(a), bFav = erFavoritt(b);
       if (aFav !== bFav) return bFav ? 1 : -1;
     }
-    if (sort === "helhet") return (b.helhet||0) - (a.helhet||0);
-    if (sort === "intensitet") return (b.intensitet||0) - (a.intensitet||0);
-    if (sort === "tenner") return (b.tenner||0) - (a.tenner||0);
+    if (sort === "helhet") return b.helhet - a.helhet;
+    if (sort === "intensitet") return b.intensitet - a.intensitet;
+    if (sort === "tenner") return b.tenner - a.tenner;
     if (sort === "snitt") return snittScore(b) - snittScore(a);
-    if (sort === "komtil") return (b.komTil||0) - (a.komTil||0);
-    return (b.createdAt||0) - (a.createdAt||0);
+    return b.createdAt - a.createdAt;
   });
 
   // Build grouped view: for each gruppe, for each kat in that gruppe, collect matching videos
@@ -14056,43 +13811,16 @@ function FavorittvideoApp({ t, onBack }) {
     <div style={{ background: t.bg, minHeight: "100vh", color: t.text, paddingBottom: 80 }}>
       <div style={{ padding: "20px 20px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <button onClick={onBack} style={{ background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 10, padding: "8px 14px", color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>← Tilbake</button>
-        <span style={{ fontSize: 17, fontWeight: 800, color: t.pink }}>🎬 Videoer</span>
-        {hovedTab === "videoer" ? (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={aapneRandom} title="Åpne tilfeldig video"
-              style={{ background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 10, padding: "8px 12px", color: t.textMuted, fontSize: 16, cursor: "pointer" }}>🎲</button>
-            <button onClick={() => setShowSettings(true)}
-              style={{ background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 10, padding: "8px 12px", color: t.textMuted, fontSize: 13, cursor: "pointer" }}>⚙️</button>
-            <button onClick={() => { setEditVideo(null); setShowModal(true); }}
-              style={{ background: t.pink, border: "none", borderRadius: 10, padding: "8px 14px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Ny</button>
-          </div>
-        ) : <div style={{ width: 70 }} />}
-      </div>
-
-      {/* Hoved-tabs: Videoer / Tutorials */}
-      <div style={{ padding: "12px 20px 0" }}>
-        <div style={{ display: "flex", background: t.surface, borderRadius: 12, padding: 4, marginBottom: 16 }}>
-          <button onClick={() => setHovedTab("videoer")}
-            style={{ flex: 1, padding: "10px", borderRadius: 9, border: "none",
-              background: hovedTab === "videoer" ? t.pink : "transparent",
-              color: hovedTab === "videoer" ? "#fff" : t.textMuted,
-              fontWeight: 700, fontSize: 14, cursor: "pointer" }}>🎬 Videoer</button>
-          <button onClick={() => setHovedTab("tutorials")}
-            style={{ flex: 1, padding: "10px", borderRadius: 9, border: "none",
-              background: hovedTab === "tutorials" ? t.blue : "transparent",
-              color: hovedTab === "tutorials" ? "#fff" : t.textMuted,
-              fontWeight: 700, fontSize: 14, cursor: "pointer" }}>🎓 Tutorials</button>
+        <span style={{ fontSize: 17, fontWeight: 800, color: t.pink }}>🎬 Favorittvideoer</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setShowSettings(true)}
+            style={{ background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 10, padding: "8px 12px", color: t.textMuted, fontSize: 13, cursor: "pointer" }}>⚙️</button>
+          <button onClick={() => { setEditVideo(null); setShowModal(true); }}
+            style={{ background: t.pink, border: "none", borderRadius: 10, padding: "8px 14px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Ny</button>
         </div>
       </div>
 
-      {hovedTab === "tutorials" && (
-        <div style={{ padding: "0 20px" }}>
-          <TutorialsTab t={t} />
-        </div>
-      )}
-
-      {hovedTab === "videoer" && (
-      <div style={{ padding: "0 20px" }}>
+      <div style={{ padding: "14px 20px 0" }}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Søk i beskrivelser..."
           style={{ width: "100%", background: t.surface, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 14px", color: t.text, fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
 
@@ -14107,7 +13835,6 @@ function FavorittvideoApp({ t, onBack }) {
           {sortKnapp("helhet", "⭐ Helhet")}
           {sortKnapp("intensitet", "🔥 Intensitet")}
           {sortKnapp("tenner", "💜 Tenner")}
-          {sortKnapp("komtil", "💦 Kom til")}
         </div>
 
         {videoer.length === 0 && (
@@ -14152,8 +13879,6 @@ function FavorittvideoApp({ t, onBack }) {
         ))}
       </div>
 
-      )}
-
       {showModal && (
         <FvModal entry={editVideo} onSave={handleSave} onClose={() => { setShowModal(false); setEditVideo(null); }} t={t} kategorier={settings.kategorier} />
       )}
@@ -14163,269 +13888,7 @@ function FavorittvideoApp({ t, onBack }) {
     </div>
   );
 }
-// ── Hemmelig: Tutorials ────────────────────────────────────────────────────────
-// Storage: hemmelig:tutorials, hemmelig:tutorials:settings
-
-function loadTutorials() {
-  try { const r = localStorage.getItem("hemmelig:tutorials"); return r ? JSON.parse(r) : []; } catch(_) { return []; }
-}
-function saveTutorials(data) {
-  try { localStorage.setItem("hemmelig:tutorials", JSON.stringify(data)); } catch(_) {}
-}
-
-const TUT_DEFAULT_KATEGORIER = ["Teknikk", "Helse & sikkerhet", "Kommunikasjon", "BDSM / Fetish", "Annet"];
-
-function loadTutSettings() {
-  try { const r = localStorage.getItem("hemmelig:tutorials:settings"); return r ? JSON.parse(r) : { kategorier: TUT_DEFAULT_KATEGORIER }; } catch(_) { return { kategorier: TUT_DEFAULT_KATEGORIER }; }
-}
-function saveTutSettings(data) {
-  try { localStorage.setItem("hemmelig:tutorials:settings", JSON.stringify(data)); } catch(_) {}
-}
-
-function TutModal({ entry, onSave, onClose, t, kategorier }) {
-  const [url, setUrl] = useState(entry ? entry.url : "");
-  const [beskrivelse, setBeskrivelse] = useState(entry ? entry.beskrivelse : "");
-  const [valgtKats, setValgtKats] = useState(entry ? (entry.kategorier || []) : []);
-
-  function toggleKat(k) {
-    setValgtKats(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]);
-  }
-
-  const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
-  const lblSt = { fontSize: 13, fontWeight: 700, color: t.textMuted, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 };
-
-  function handleSave() {
-    if (!beskrivelse.trim()) return;
-    onSave({ id: entry ? entry.id : "tut" + Date.now(), url: url.trim(), beskrivelse: beskrivelse.trim(), kategorier: valgtKats, createdAt: entry ? entry.createdAt : Date.now() });
-  }
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "88vh", overflowY: "auto" }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 20 }}>{entry ? "Rediger tutorial" : "Ny tutorial"}</div>
-
-        <div style={{ marginBottom: 14 }}>
-          <span style={lblSt}>Beskrivelse *</span>
-          <textarea value={beskrivelse} onChange={e => setBeskrivelse(e.target.value)}
-            placeholder="Hva handler denne tutorialen om?" rows={3}
-            style={{ ...inputSt, resize: "none", lineHeight: 1.5 }} />
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <span style={lblSt}>URL (valgfritt)</span>
-          <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://..." style={inputSt} />
-          {url && <div style={{ fontSize: 12, color: t.purple, marginTop: 4 }}>🔗 {fvDomain(url)}</div>}
-        </div>
-
-        <div style={{ marginBottom: 24 }}>
-          <span style={lblSt}>Kategorier</span>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {kategorier.map(k => (
-              <button key={k} onClick={() => toggleKat(k)}
-                style={{ padding: "8px 14px", borderRadius: 20,
-                  border: `2px solid ${valgtKats.includes(k) ? t.blue : t.border}`,
-                  background: valgtKats.includes(k) ? t.blue + "22" : t.bg,
-                  color: valgtKats.includes(k) ? t.blue : t.textMuted,
-                  fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                {k}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.bg, color: t.textMuted, fontWeight: 700, cursor: "pointer" }}>Avbryt</button>
-          <button onClick={handleSave} disabled={!beskrivelse.trim()}
-            style={{ flex: 2, padding: "14px", borderRadius: 12, border: "none", background: beskrivelse.trim() ? t.blue : t.border, color: "#fff", fontWeight: 700, fontSize: 15, cursor: beskrivelse.trim() ? "pointer" : "default" }}>Lagre</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TutKort({ item, t, onEdit, onDelete }) {
-  function aapne() { if (item.url) window.open(item.url, "_blank", "noopener,noreferrer"); }
-
-  return (
-    <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 10 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, lineHeight: 1.5, marginBottom: 8 }}>{item.beskrivelse}</div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: item.url ? 10 : 0 }}>
-        {(item.kategorier || []).map(k => (
-          <span key={k} style={{ fontSize: 11, color: t.blue, background: t.blue + "18", padding: "2px 8px", borderRadius: 20 }}>{k}</span>
-        ))}
-      </div>
-      {item.url && <div style={{ fontSize: 12, color: t.textFaint, marginBottom: 10 }}>🔗 {fvDomain(item.url)}</div>}
-      <div style={{ display: "flex", gap: 8 }}>
-        {item.url && (
-          <button onClick={aapne}
-            style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: t.blue, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-            ▶ Åpne
-          </button>
-        )}
-        <button onClick={onEdit}
-          style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.bg, color: t.textMuted, cursor: "pointer" }}>✏️</button>
-        <button onClick={onDelete}
-          style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.bg, color: "#ef4444", cursor: "pointer" }}>×</button>
-      </div>
-    </div>
-  );
-}
-
-function TutKategoriGruppe({ navn, items, t, onEdit, onDelete }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <button onClick={() => setOpen(!open)}
-        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: t.surface, border: `1px solid ${t.border}`, borderRadius: open ? "12px 12px 0 0" : 12,
-          padding: "12px 16px", cursor: "pointer" }}>
-        <span style={{ fontWeight: 700, fontSize: 14, color: t.blue }}>{navn}</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12, color: t.textMuted, background: t.bg, padding: "2px 8px", borderRadius: 20 }}>{items.length}</span>
-          <span style={{ fontSize: 14, color: t.textMuted }}>{open ? "▲" : "▼"}</span>
-        </div>
-      </button>
-      {open && (
-        <div style={{ border: `1px solid ${t.border}`, borderTop: "none", borderRadius: "0 0 12px 12px", padding: "10px 10px 2px" }}>
-          {items.map(item => (
-            <TutKort key={item.id} item={item} t={t} onEdit={() => onEdit(item)} onDelete={() => onDelete(item.id)} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TutSettingsModal({ settings, onSave, onClose, t }) {
-  const [kategorier, setKategorier] = useState([...settings.kategorier]);
-  const [nyKat, setNyKat] = useState("");
-
-  function leggTil() {
-    const v = nyKat.trim();
-    if (!v || kategorier.includes(v)) return;
-    setKategorier([...kategorier, v]);
-    setNyKat("");
-  }
-
-  const inputSt = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: "10px 12px", color: t.text, fontSize: 14, outline: "none", fontFamily: "inherit", flex: 1, boxSizing: "border-box" };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: t.overlay, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.surface, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "24px 20px 44px", maxHeight: "85vh", overflowY: "auto" }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: t.text, marginBottom: 4 }}>⚙️ Kategorier</div>
-        <div style={{ fontSize: 13, color: t.textFaint, marginBottom: 16 }}>Dra i ⠿ for å endre rekkefølge.</div>
-        <DragSortList items={kategorier} onReorder={setKategorier}
-          onDelete={idx => setKategorier(kategorier.filter((_, i) => i !== idx))}
-          accentColor={t.blue} t={t} />
-        <div style={{ display: "flex", gap: 8, marginBottom: 24, marginTop: 8 }}>
-          <input value={nyKat} onChange={e => setNyKat(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && leggTil()}
-            placeholder="Ny kategori..." style={inputSt} />
-          <button onClick={leggTil}
-            style={{ padding: "10px 16px", borderRadius: 10, border: "none", background: t.blue, color: "#fff", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>+ Legg til</button>
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `1px solid ${t.border}`, background: t.bg, color: t.textMuted, fontWeight: 700, cursor: "pointer" }}>Avbryt</button>
-          <button onClick={() => onSave({ ...settings, kategorier })} style={{ flex: 2, padding: "14px", borderRadius: 12, border: "none", background: t.blue, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Lagre</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TutorialsTab({ t }) {
-  const [items, setItems] = useState([]);
-  const [settings, setSettings] = useState({ kategorier: TUT_DEFAULT_KATEGORIER });
-  const [showModal, setShowModal] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [editItem, setEditItem] = useState(null);
-  const [search, setSearch] = useState("");
-  const [visning, setVisning] = useState("kategorier");
-
-  useEffect(() => {
-    setItems(loadTutorials());
-    setSettings(loadTutSettings());
-  }, []);
-
-  function handleSave(item) {
-    const updated = items.find(x => x.id === item.id)
-      ? items.map(x => x.id === item.id ? item : x)
-      : [item, ...items];
-    setItems(updated); saveTutorials(updated);
-    setShowModal(false); setEditItem(null);
-  }
-  function handleDelete(id) {
-    const updated = items.filter(x => x.id !== id);
-    setItems(updated); saveTutorials(updated);
-  }
-
-  const filtered = items.filter(x => !search ||
-    x.beskrivelse.toLowerCase().includes(search.toLowerCase()));
-  const sorted = [...filtered].sort((a, b) => b.createdAt - a.createdAt);
-
-  const gruppert = (() => {
-    const grupper = [];
-    settings.kategorier.forEach(k => {
-      const its = sorted.filter(x => (x.kategorier || []).includes(k));
-      if (its.length > 0) grupper.push({ navn: k, items: its });
-    });
-    const ukat = sorted.filter(x => !x.kategorier || x.kategorier.length === 0 ||
-      !x.kategorier.some(k => settings.kategorier.includes(k)));
-    if (ukat.length > 0) grupper.push({ navn: "Ukategorisert", items: ukat });
-    return grupper;
-  })();
-
-  const tabSt = active => ({
-    flex: 1, padding: "9px", borderRadius: 9, border: "none",
-    background: active ? t.blue : "transparent",
-    color: active ? "#fff" : t.textMuted,
-    fontWeight: 700, fontSize: 13, cursor: "pointer"
-  });
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Søk..."
-          style={{ flex: 1, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 14px", color: t.text, fontSize: 14, outline: "none", marginRight: 10 }} />
-        <button onClick={() => setShowSettings(true)}
-          style={{ background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 10, padding: "9px 12px", color: t.textMuted, fontSize: 13, cursor: "pointer", marginRight: 8 }}>⚙️</button>
-        <button onClick={() => { setEditItem(null); setShowModal(true); }}
-          style={{ background: t.blue, border: "none", borderRadius: 10, padding: "9px 14px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>+ Ny</button>
-      </div>
-
-      <div style={{ display: "flex", background: t.surface, borderRadius: 12, padding: 4, marginBottom: 14 }}>
-        <button style={tabSt(visning === "kategorier")} onClick={() => setVisning("kategorier")}>🗂 Kategorier</button>
-        <button style={tabSt(visning === "liste")} onClick={() => setVisning("liste")}>📋 Liste</button>
-      </div>
-
-      {items.length === 0 && (
-        <div style={{ textAlign: "center", color: t.textMuted, padding: 40 }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>🎓</div>
-          <div>Ingen tutorials lagt til ennå.</div>
-        </div>
-      )}
-
-      {visning === "liste" && sorted.map(item => (
-        <TutKort key={item.id} item={item} t={t}
-          onEdit={() => { setEditItem(item); setShowModal(true); }}
-          onDelete={() => { if(window.confirm("Slett denne tutorialen?")) handleDelete(item.id); }} />
-      ))}
-
-      {visning === "kategorier" && gruppert.map(g => (
-        <TutKategoriGruppe key={g.navn} navn={g.navn} items={g.items} t={t}
-          onEdit={item => { setEditItem(item); setShowModal(true); }}
-          onDelete={id => { if(window.confirm("Slett denne tutorialen?")) handleDelete(id); }} />
-      ))}
-
-      {showModal && (
-        <TutModal entry={editItem} onSave={handleSave} onClose={() => { setShowModal(false); setEditItem(null); }} t={t} kategorier={settings.kategorier} />
-      )}
-      {showSettings && (
-        <TutSettingsModal settings={settings} onSave={s => { setSettings(s); saveTutSettings(s); setShowSettings(false); }} onClose={() => setShowSettings(false)} t={t} />
-      )}
-    </div>
-  );
-}
+// ── Hemmelig: Coming Soon sub-app placeholder ──────────────────────────────────
 function HemmeligComingSoon({ name, icon, t, onBack }) {
   return (
     <div style={{ background: t.bg, minHeight: "100vh", color: t.text, display: "flex", flexDirection: "column" }}>
@@ -14982,27 +14445,52 @@ function BursdagsOverlay({ onClose, isTest }) {
   );
 }
 
+// Navigasjons-dybde for å avgjøre slide-retning
+const SCREEN_DEPTH = { splash: 0, arbeid: 1, fritid: 1, hemmelig: 1 };
+function screenDepth(s) {
+  if (SCREEN_DEPTH[s] !== undefined) return SCREEN_DEPTH[s];
+  if (s.startsWith("hemmelig:") && !s.slice(9).includes(":")) return 2;
+  if (s.startsWith("hemmelig:")) return 3;
+  if (s.startsWith("app:")) return 2;
+  return 2;
+}
+
 function Hub() {
   const [darkMode, setDarkMode] = useState(true);
   const [screen, setScreen] = useState("splash");
+  const [pageClass, setPageClass] = useState("lh-fade-in");
+  const prevDepthRef = useRef(0);
   const [loaded, setLoaded] = useState(false);
   const t = THEMES[darkMode ? "dark" : "light"];
   const { isBursdag, isTest } = useBursdagStatus();
   const [showBursdag, setShowBursdag] = useState(false);
 
   function navigateTo(newScreen) {
+    const nextDepth = screenDepth(newScreen);
+    const prevDepth = prevDepthRef.current;
+    const cls = nextDepth > prevDepth ? "lh-slide-in" : nextDepth < prevDepth ? "lh-slide-back" : "lh-fade-in";
+    prevDepthRef.current = nextDepth;
+    setPageClass("");
+    requestAnimationFrame(() => {
+      setScreen(newScreen);
+      setPageClass(cls);
+    });
     history.pushState({ screen: newScreen }, "", "");
-    setScreen(newScreen);
   }
 
   useEffect(() => {
     function onPopState(e) {
-      if (e.state && e.state.screen) {
-        setScreen(e.state.screen);
-      } else {
-        setScreen("splash");
-        history.pushState({ screen: "splash" }, "", "");
-      }
+      const newScreen = (e.state && e.state.screen) ? e.state.screen : "splash";
+      const nextDepth = screenDepth(newScreen);
+      const prevDepth = prevDepthRef.current;
+      const cls = nextDepth < prevDepth ? "lh-slide-back" : "lh-fade-in";
+      prevDepthRef.current = nextDepth;
+      setPageClass("");
+      requestAnimationFrame(() => {
+        setScreen(newScreen);
+        setPageClass(cls);
+        if (!e.state) history.pushState({ screen: "splash" }, "", "");
+      });
     }
     window.addEventListener("popstate", onPopState);
     history.replaceState({ screen: "splash" }, "", "");
@@ -15020,6 +14508,28 @@ function Hub() {
       setLoaded(true);
     }
     load();
+  }, []);
+
+  // Global ripple + haptikk på alle knapper
+  useEffect(() => {
+    function onPointerDown(e) {
+      const btn = e.target.closest("button");
+      if (!btn || btn.disabled) return;
+      // Haptikk — kort puls (Android Vibration API)
+      try { navigator.vibrate && navigator.vibrate(8); } catch(_) {}
+      // Ripple
+      const rect = btn.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height) * 1.6;
+      const x = e.clientX - rect.left - size / 2;
+      const y = e.clientY - rect.top - size / 2;
+      const span = document.createElement("span");
+      span.className = "lh-ripple";
+      span.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px;`;
+      btn.appendChild(span);
+      span.addEventListener("animationend", () => span.remove(), { once: true });
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
   }, []);
 
   async function toggleDark() {
@@ -15045,43 +14555,42 @@ function Hub() {
     return <BursdagsOverlay isTest={isTest} onClose={() => setShowBursdag(false)} />;
   }
 
-  if (screen === "app:trening")   return <TreningApp t={t} onBack={() => navigateTo("arbeid")} />;
-  if (screen === "app:husarbeid") return <HusoppgaverApp t={t} onBack={() => navigateTo("arbeid")} />;
-  if (screen === "app:handleliste") return <HandlelisteApp t={t} onBack={() => navigateTo("arbeid")} />;
-  if (screen === "app:jobb")     return <JobbApp t={t} onBack={() => navigateTo("arbeid")} />;
-  if (screen === "app:okonomi")  return <ØkonomiApp t={t} onBack={() => navigateTo("arbeid")} />;
-  if (screen === "app:gaming")     return <GamingApp t={t} onBack={() => navigateTo("fritid")} />;
-  if (screen === "app:lister")     return <ListerApp th={t} onBack={() => navigateTo("fritid")} />;
-  if (screen === "app:onskeliste") return <GaverOnskelisteApp t={t} onBack={() => navigateTo("fritid")} />;
-  if (screen === "app:drommer")    return <DrommerApp t={t} onBack={() => navigateTo("fritid")} />;
-  if (screen === "app:kor")      return <KorApp t={t} onBack={() => navigateTo("fritid")} />;
-  if (screen === "app:gladidag") return <GladIDagApp t={t} onBack={() => navigateTo("splash")} />;
+  const P = ({children}) => <div className={pageClass} style={{minHeight:"100vh"}}>{children}</div>;
+
+  if (screen === "app:trening")   return <P><TreningApp t={t} onBack={() => navigateTo("arbeid")} /></P>;
+  if (screen === "app:husarbeid") return <P><HusoppgaverApp t={t} onBack={() => navigateTo("arbeid")} /></P>;
+  if (screen === "app:handleliste") return <P><HandlelisteApp t={t} onBack={() => navigateTo("arbeid")} /></P>;
+  if (screen === "app:jobb")     return <P><JobbApp t={t} onBack={() => navigateTo("arbeid")} /></P>;
+  if (screen === "app:okonomi")  return <P><ØkonomiApp t={t} onBack={() => navigateTo("arbeid")} /></P>;
+  if (screen === "app:gaming")     return <P><GamingApp t={t} onBack={() => navigateTo("fritid")} /></P>;
+  if (screen === "app:lister")     return <P><ListerApp th={t} onBack={() => navigateTo("fritid")} /></P>;
+  if (screen === "app:onskeliste") return <P><GaverOnskelisteApp t={t} onBack={() => navigateTo("fritid")} /></P>;
+  if (screen === "app:drommer")    return <P><DrommerApp t={t} onBack={() => navigateTo("fritid")} /></P>;
+  if (screen === "app:kor")      return <P><KorApp t={t} onBack={() => navigateTo("fritid")} /></P>;
+  if (screen === "app:gladidag") return <P><GladIDagApp t={t} onBack={() => navigateTo("splash")} /></P>;
 
   // ── Hemmelig screens ──
   if (screen === "hemmelig") {
-    return <HemmeligSplash t={t} onBack={() => navigateTo("splash")} onOpenCat={id => navigateTo("hemmelig:" + id)} onChangePin={() => {}} />;
+    return <P><HemmeligSplash t={t} onBack={() => navigateTo("splash")} onOpenCat={id => navigateTo("hemmelig:" + id)} onChangePin={() => {}} /></P>;
   }
   if (screen.startsWith("hemmelig:")) {
     const rest = screen.replace("hemmelig:", "");
-    // Sub-app within a category: hemmelig:catId:appId
     if (rest.includes(":")) {
       const [catId, appId] = rest.split(":");
-      // Actual sub-app implementations go here as they're built
-      // Actual implementations
-      if (appId === "orgasmekalender") return <OrgasmekalenderApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "bodycount") return <BodyCountApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "onskeliste") return <OnskelisteApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "turnons") return <KinkProfilApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "bucketlist") return <BucketlistApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "favorittvideoer") return <FavorittvideoApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "personkatalog") return <PersonkatalogApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "julegave") return <JulegaveApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "sexlysttracker") return <SexlystApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "stitester") return <STIApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "humorkart") return <VelvareApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "sosialemaal") return <SosialeMaalApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "dagbok") return <DagbokApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
-      if (appId === "passord") return <PassordApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
+      if (appId === "orgasmekalender") return <P><OrgasmekalenderApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "bodycount") return <P><BodyCountApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "onskeliste") return <P><OnskelisteApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "turnons") return <P><KinkProfilApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "bucketlist") return <P><BucketlistApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "favorittvideoer") return <P><FavorittvideoApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "personkatalog") return <P><PersonkatalogApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "julegave") return <P><JulegaveApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "sexlysttracker") return <P><SexlystApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "stitester") return <P><STIApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "humorkart") return <P><VelvareApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "sosialemaal") return <P><SosialeMaalApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "dagbok") return <P><DagbokApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
+      if (appId === "passord") return <P><PassordApp t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
 
       const APP_META = {
         orgasmekalender: { name: "Orgasmekalender", icon: "📅" },
@@ -15099,10 +14608,9 @@ function Hub() {
         passord:         { name: "Passord og pinkoder", icon: "🔑" },
       };
       const meta = APP_META[appId] || { name: appId, icon: "📱" };
-      return <HemmeligComingSoon name={meta.name} icon={meta.icon} t={t} onBack={() => navigateTo("hemmelig:" + catId)} />;
+      return <P><HemmeligComingSoon name={meta.name} icon={meta.icon} t={t} onBack={() => navigateTo("hemmelig:" + catId)} /></P>;
     }
-    // Category page: hemmelig:catId
-    return <HemmeligCategoryPage category={rest} t={t} onBack={() => navigateTo("hemmelig")} onOpenApp={appId => navigateTo("hemmelig:" + rest + ":" + appId)} />;
+    return <P><HemmeligCategoryPage category={rest} t={t} onBack={() => navigateTo("hemmelig")} onOpenApp={appId => navigateTo("hemmelig:" + rest + ":" + appId)} /></P>;
   }
 
   if (screen.startsWith("app:")) {
@@ -15113,14 +14621,14 @@ function Hub() {
       lister: { name: "Lister",       icon: "📋" },
     };
     const meta = META[appId] || { name: appId, icon: "📱" };
-    return <ComingSoon name={meta.name} icon={meta.icon} t={t} onBack={() => navigateTo("fritid")} />;
+    return <P><ComingSoon name={meta.name} icon={meta.icon} t={t} onBack={() => navigateTo("fritid")} /></P>;
   }
 
   if (screen === "arbeid" || screen === "fritid") {
-    return <CategoryPage category={screen} t={t} onBack={() => navigateTo("splash")} onOpenApp={id => navigateTo("app:" + id)} darkMode={darkMode} onToggleDark={toggleDark} />;
+    return <P><CategoryPage category={screen} t={t} onBack={() => navigateTo("splash")} onOpenApp={id => navigateTo("app:" + id)} darkMode={darkMode} onToggleDark={toggleDark} /></P>;
   }
 
-  return <SplashScreen t={t} onSelect={navigateTo} darkMode={darkMode} onToggleDark={toggleDark} />;
+  return <P><SplashScreen t={t} onSelect={navigateTo} darkMode={darkMode} onToggleDark={toggleDark} /></P>;
 }
 
 
