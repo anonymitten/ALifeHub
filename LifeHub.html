@@ -90,7 +90,279 @@ function useFadeIn() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.22-03";
+const APP_VERSION = "2026.07.22-04";
+
+// ── Motivasjoner (336 oppføringer) ────────────────────────────────────────────
+// Storage: motivasjon:dag { date, index, tekst }
+//          motivasjon:favoritter  ["tekst", ...]
+//          motivasjon:historikk   [{ date, tekst }, ...]
+const MOTIVASJONER = [
+  "Du blir gladere av å høre til enn av å få til. Det er ikke en svakhet, det er en instruks.",
+  "Koret er grunnfjellet ditt. Tre til seks gode dager hver eneste måned, uten unntak.",
+  "Du trenger ikke prestere for å høre til. Dataene dine sier det ganske tydelig.",
+  "Sanger'n er ikke bare et lokale. Det er et sted du er noen.",
+  "Det sosiale slår soloen. Hver gang, i sju måneder på rad.",
+  "Du gikk fra å delta til å høre til. Det tok fire måneder, og du gjorde det.",
+  "«Savnet meg» sto ikke i januar. Det står i mai. Du bygget det.",
+  "Vors til vors. Blæsting. Budalen. Det er ikke fyll, det er tilhørighet med lyd på.",
+  "Du er ikke gjest i koret lenger. Det tok tid, og nå er det sant.",
+  "Førti musikalske gærninger i Budalen. Du var én av dem, ikke ved siden av dem.",
+  "Backstage mellom to seremonier — det var der du var gladest, ikke på scenen.",
+  "Det er lov å bli glad av å bare være i rommet med folk.",
+  "Du har to kor, et vennekornettverk og en hybel. Det er ikke tilfeldig.",
+  "Kruserne. Knauskoret. TSS. Du er inne, ikke på vei inn.",
+  "Noen leter etter deg når du ikke er der. Det er dokumentert.",
+  "Det som gjør deg gladest er å bli sett. Ikke å imponere. Å bli sett.",
+  "Noen sjekket innom uten at du ba om det. Det er det som teller mest hos deg.",
+  "Å bli tenkt på uten å ha bedt om det — det er ditt mønster. Det skjer ofte.",
+  "Du behøver ikke gjøre deg fortjent til oppmerksomhet. Du har den allerede.",
+  "Folk merker når du er der. Det er ikke selvfølgelig for alle.",
+  "Å bli savnet er bevis på at du betyr noe. Du blir savnet.",
+  "Noen sjekker om du har det bra. Ikke fordi de må, men fordi de vil.",
+  "Du er ikke bakgrunnen i andres liv. Du er noen folk søker opp.",
+  "Bli-sett-øyeblikkene er der, selv om du ikke alltid legger merke til dem.",
+  "Å bli husket er ikke tilfeldig. Det er noe du har bygget.",
+  "Sander og Jakob ringer deg ikke for ingenting.",
+  "En venn som sjekker inn er ikke småtteri. Det er akkurat det du trenger mest.",
+  "Du har folk som tenker på deg i hverdagen. Det er nok.",
+  "Noen minner seg selv på å ta kontakt med deg. Det betyr noe.",
+  "Du er en person andre vil ha i livet sitt. Det er bevist.",
+  "De gode dagene inkluderer nesten alltid en annen person. Det forteller deg noe.",
+  "Venner er ikke en bonus. For deg er de kjernen.",
+  "Treffer-Sander-tilfeldigheter er ikke tilfeldigheter. Det er vennskap.",
+  "En god samtale kan snu en hel dag. Du vet det bedre enn de fleste.",
+  "Det er ikke svakhet å trenge folk. Det er akkurat hvem du er.",
+  "Du er ikke flink til å be om hjelp, men flink til å gi den. Øv på begge.",
+  "Noen ganger er én god samtale nok til at alt løsner litt.",
+  "Å dele en god dag med noen gjør den bedre. Det har du skjønt.",
+  "Du gjør andre bedre — det er en del av hvem du er.",
+  "Vennskap krever vedlikehold. Du er flink til det, selv når du ikke tror det.",
+  "Nærhet er ikke alltid ord. Det er tilstedeværelse. Du er god på det.",
+  "De gode øyeblikkene er oftest delt. Husk det neste gang du vil trekke deg.",
+  "Du har en evne til å skape varme i rommet. Folk merker det.",
+  "En venn som sier det som er, er sjeldnere enn du tror. Du er en av dem.",
+  "Nærhet handler ikke om antall timer. Det handler om kvalitet på tilstedeværelse.",
+  "Du er ikke til bry. Du er til berikelse.",
+  "De som kjenner deg, velger deg aktivt. Det er ikke selvfølgelig.",
+  "Jobb er ikke det som gjør deg glad. Mestring og variasjon er.",
+  "En god arbeidsdag er en dag der noe faktisk ble bedre. Du vet hvordan.",
+  "Du er ikke lat. Du er utbrent av feil type arbeid.",
+  "ADHD betyr ikke dårlig arbeidsmoral. Det betyr annen motor.",
+  "Mestringsfølelse trumfer lønn. Du vet det. Husk det når du velger.",
+  "Du jobber best med korte spurter og klare mål. Det er ikke en feil, det er et system.",
+  "Variasjon i oppgaver er ikke ukonsentrerthet. Det er ditt brennstoff.",
+  "Du trenger ikke å jobbe som alle andre for å yte like bra.",
+  "Godt humør på jobb smitter. Og du har det ofte.",
+  "Autonomi gjør deg bedre. Ikke bare lykkeligere — bedre.",
+  "Struktur utenfra hjelper deg. Det er ikke skam å be om det.",
+  "Du trives med å gjøre en konkret forskjell. Finn oppgaver som gir det.",
+  "Korte leveranser, tydelig fremgang — det er ditt arbeidsformat.",
+  "ADHD er ikke et hinder. Det er et annet utgangspunkt.",
+  "Ukonsentrert er ikke det samme som umotivert. Du vet forskjellen.",
+  "Du maskerer godt. Men du behøver ikke alltid gjøre det.",
+  "Diagnosen forklarer mye. Den unnskylder ingenting — og det er greit.",
+  "Hyperfokus er en superkraft. Bruk den med vilje.",
+  "Struktur er ikke tvangstrøye. Det er stillasene som holder deg oppe.",
+  "Unngåelse er ikke latskap. Det er hjernen som prøver å beskytte deg.",
+  "Du er mer produktiv enn du tror — bare ikke på de planlagte tidspunktene.",
+  "ADHD + musikk = en kombinasjon som fungerer bedre enn de fleste skjønner.",
+  "Pauser er ikke avbrekk fra jobb. De er en del av jobben.",
+  "Hvile er ikke dovenskap. For deg er det faktisk et krav.",
+  "Du sover ikke for lite fordi du er svak. Du sover for lite fordi hjernen din ikke slår seg av.",
+  "En god natts søvn endrer alt. Prioriter det som om det er medisin.",
+  "Det er ikke lat å hvile. Det er nødvendig vedlikehold.",
+  "Du har ikke råd til å overse hvilen. Kroppen sender regningen uansett.",
+  "Ro er ikke kjedelig. Ro er noe du faktisk trenger.",
+  "Stille stunder er ikke bortkastet tid. De er lading.",
+  "Du trenger ikke fylle alle pausene med noe. Noen pauser er bare pauser.",
+  "Å tillate seg ro er en ferdighet. Du øver på den.",
+  "Søvn er ikke en luksusvare. Det er bunnlinjen.",
+  "Det er lov å bare sitte. Ikke planlegge. Ikke optimere. Bare sitte.",
+  "Å komme seg ut i naturen er ikke bortkastet tid. Det er påfyll.",
+  "Kroppen husker hva som er godt for den. Lytt til den litt oftere.",
+  "Tore er ikke bare en person. Han er en av de tingene som er viktigst i livet ditt.",
+  "Du er ikke alene. Tore er der.",
+  "Å elske noen og bli elsket tilbake er ikke selvfølgelig. Du har det.",
+  "Forholdet ditt er noe du har valgt aktivt og gjentatte ganger. Det teller.",
+  "Tore ser deg — ikke versjonen du presenterer, men den faktiske deg.",
+  "Det er styrke å være sårbar overfor noen. Du klarer det.",
+  "Kjærlighet er ikke en følelse du venter på. Det er noe dere bygger.",
+  "Du er ikke perfekt å elske. Ingen er. Men du er verdt å elske.",
+  "Nærhet til Tore er en av de sikre kildene dine. Vend tilbake til den.",
+  "Et godt forhold er ikke fravær av konflikt. Det er vilje til å komme tilbake.",
+  "Helsen din er under arbeid. Det er ikke et nederlag — det er pågangsmot.",
+  "Du jobber med kroppen din. Det er ikke lite.",
+  "Å ta vare på helsen er ikke selvopptatthet. Det er nødvendig.",
+  "Fremgang er ikke alltid synlig. Men den skjer likevel.",
+  "Kroppen din har båret deg gjennom mye. Respekter den.",
+  "Du er i bedre form enn du var. Det er sant, selv om det ikke alltid føles slik.",
+  "Å begynne er vanskeligere enn å fortsette. Du har begynt.",
+  "Helse er ikke mål. Det er grunnlag for alt annet.",
+  "Du trenger ikke være perfekt for å bevege deg fremover.",
+  "Én liten forbedring er mer enn ingen. Det teller.",
+  "Identitet er ikke fastsatt. Du har bevist det selv.",
+  "Du er ikke summen av det du skjuler. Du er det du faktisk gjør.",
+  "Å komme ut er ikke en begivenhet. Det er en prosess du har levd.",
+  "Du har brutt mønstre som de fleste aldri engang utfordrer.",
+  "Det du er, ble ikke til tilfeldig. Du har jobbet for det.",
+  "Hvem du er i dag er et valg du har gjort, gang etter gang.",
+  "Du er ikke den du var for fem år siden. Det er vekst.",
+  "Autentisitet koster. Du har betalt prisen og beholdt deg selv.",
+  "Du vet hvem du er. Det er sjeldnere enn du tror.",
+  "Identitet er ikke et svar du finner. Det er noe du lever frem.",
+  "Du er et helt menneske — med alt det innebærer. Det er nok.",
+  "Sommeren byr alltid på noe godt for deg. Vær åpen for det.",
+  "Sesonger betyr noe for deg. Bruk dem med vilje.",
+  "Julen er faktisk fin for deg. Husk det når den nærmer seg.",
+  "Vår og sommer bringer deg opp. Planlegg deretter.",
+  "Sesongene styrer humøret ditt mer enn du tror. Det er informasjon, ikke svakhet.",
+  "Festivalsommeren er ikke bare fest. Det er tanking.",
+  "Det finnes gode ting i alle årstider. Noen krever bare litt mer leting.",
+  "Planlegg sommeren med omhu — du vet at den gir deg mye.",
+  "Bra dager i koret skjer oftest fra september til juni. Bruk den kunnskapen.",
+  "Sesong er ikke bare vær. Det er energi, fellesskap og rytme.",
+  "Et kortord er ikke bare en setning. Det er noe som treffer.",
+  "Du trenger ikke lange forklaringer. En god setning holder noen ganger.",
+  "Noen sannheter er korte. Det gjør dem ikke mindre sanne.",
+  "Et lite ord til rett tid kan snu en hel dag.",
+  "Du vet mer enn du gir deg selv æren for.",
+  "I dag er nok. Du trenger ikke løse alt.",
+  "Du er i bevegelse. Det er det viktigste.",
+  "En ting av gangen. Det er faktisk et komplett system.",
+  "Litt fremgang er mer enn null fremgang.",
+  "Du klarer mer enn du tror. Beviset er dagene bak deg.",
+  "En god dag er ikke nødvendigvis en produktiv dag.",
+  "Noen ganger er det å stå opp nok.",
+  "Du er ikke etter. Du er der du er.",
+  "Å gjøre sitt beste ser forskjellig ut fra dag til dag. Det er greit.",
+  "Du er på rett sted. Det tok tid, og det var verdt det.",
+  "Å ta et lite steg fremover er ikke lite. Det er alt.",
+  "Ro i kroppen smitter til hodet. Bruk det.",
+  "Du trenger ikke ha svar på alt akkurat nå.",
+  "Det holder å gjøre én ting bra i dag.",
+  "Fremgang føles sjelden som fremgang mens den skjer.",
+  "Du er tøffere enn du lar deg selv tro.",
+  "Musikken gjør deg glad. Det er ikke trivielt.",
+  "Koret er ikke bare øving. Det er ukentlig påminnelse om hvem du er.",
+  "Du synger fordi det gjør noe med deg innenfra. Det er ekte.",
+  "En god konsert er ikke bare underholdning. Det er noe du bærer med deg.",
+  "Musikk er ikke hobby. For deg er det nødvendighet.",
+  "Dirigenten stoler på deg. Det er ikke tilfeldig.",
+  "Å mestre et vanskelig parti er ikke lite. Det er faktisk noe.",
+  "Musikk kobler deg til folk på en måte ingenting annet gjør.",
+  "Du er ikke bare en stemme i mengden. Du er en del av noe.",
+  "Når musikken klaffer, vet du det. Husk følelsen.",
+  "Koret er ikke forpliktelse. Det er valg du gjør hver uke, fordi det betyr noe.",
+  "Det handler ikke om å endre alt på én gang. Én ting holder.",
+  "Du trenger ikke være motivert for å begynne. Begynn likevel.",
+  "En liten vane er mer verdifull enn en stor plan du ikke følger.",
+  "Systemet ditt trenger ikke være perfekt. Det trenger bare å virke.",
+  "Du har kommet deg gjennom vanskeligere dager enn denne.",
+  "Å velge å prøve igjen er ikke svakhet. Det er karakter.",
+  "Det finnes alltid en liten åpning videre. Se etter den.",
+  "Du endrer deg sakte, og det er akkurat raskt nok.",
+  "Å gi seg selv en sjanse er ikke selvmedlidenhet. Det er selvrespekt.",
+  "Fremgang er ikke lineær. Det er lov.",
+  "Et lite skifte i retning endrer destinasjonen helt.",
+  "Du trenger ikke all motivasjon på én gang. Litt rekker.",
+  "Det er lov å starte på nytt. Så mange ganger du vil.",
+  "Å se verden fra et annet sted endrer hva du ser.",
+  "Du er ikke fastlåst i noen versjon av deg selv.",
+  "Perspektiv er ikke passivitet. Det er klarhet.",
+  "Noen ganger er det nok å zoome litt ut.",
+  "Alt føles mer overkommelig med litt avstand.",
+  "Det som er tungt nå, vil ikke alltid veie like mye.",
+  "Du er ikke problemet. Du er personen som prøver å løse det.",
+  "Å se det store bildet er en ferdighet. Du har den.",
+  "Ingenting varer evig — verken det gode eller det tunge.",
+  "Du har et bredere perspektiv enn du gir deg selv æren for.",
+  "Rolige dager er undervurderte. De holder deg oppe.",
+  "Indre ro er ikke fravær av problemer. Det er evne til å bære dem.",
+  "En stille dag er ikke en bortkastet dag.",
+  "Ro gir deg kapasitet til alt annet. Beskytt den.",
+  "Du trenger ikke alltid gjøre noe. Å bare være er nok noen ganger.",
+  "Stillhet er ikke tomt. Det er faktisk noe.",
+  "Du lader ikke på samme måte som alle andre. Det er greit.",
+  "En kveld uten plan kan være akkurat det du trenger.",
+  "Å ta seg tid er ikke å kaste bort tid.",
+  "Rolig og klar er en bedre starttilstand enn travel og sliten.",
+  "Du fortjener pauser, ikke bare som belønning, men som grunnlag.",
+  "Økonomi er ikke bare tall. Det er frihet du bygger deg mot.",
+  "Å betale ned gjeld er ikke kjedelig. Det er faktisk fremgang.",
+  "Du er ikke dårlig med penger. Du er i en prosess.",
+  "Hvert beløp du setter av er et steg mot mindre stress.",
+  "Kontroll over økonomi gir ro i hodet. Det er verdt innsatsen.",
+  "Du trenger ikke ha alt på stell. Du trenger å ha retning.",
+  "En liten buffer er bedre enn ingen buffer.",
+  "Å ta tak i økonomien er en form for omsorg for fremtidig deg.",
+  "Små grep i budsjettet legger seg opp over tid.",
+  "Du er på rett vei. Tempoet er underordnet.",
+  "Å kjenne sin egen kropp er ikke selvopptatthet. Det er kunnskap.",
+  "Du lever i kroppen din. Det er lov å kjenne etter hva den vil.",
+  "Naturisme er ikke et valg mot andre. Det er et valg for deg selv.",
+  "Komfort i egen kropp er ikke selvfølgelig. Du jobber mot det.",
+  "Å ta plass — bokstavelig talt — er en øvelse i å tro at du hører til.",
+  "Du er mer komfortabel i deg selv enn for et år siden. Det er sant.",
+  "Kroppen din er ikke et problem som skal løses.",
+  "Å slappe av uten klær er ikke rart. Det er menneskelig.",
+  "Du vet hva som gir deg ro. Gi deg selv tillatelse til å oppsøke det.",
+  "Å kjenne seg fri i kroppen er noe du har lært deg. Det er ditt.",
+  "LifeHub-appen er ikke bare et prosjekt. Det er et verktøy for deg selv.",
+  "Å bygge noe for seg selv er en gave til fremtidig deg.",
+  "Du er kreativ nok til å løse dine egne problemer. Beviset er der.",
+  "Et system som faktisk hjelper deg er mer verdt enn hundre apper du ikke bruker.",
+  "Du vet hva du trenger. Og du bygger det. Det er ikke lite.",
+  "Å investere i egne verktøy er ikke selvopptatthet. Det er fornuftig.",
+  "Appen din vil bli bedre enn noe andre lager for deg. Fordi du vet hva du trenger.",
+  "Du løser problemer kreativt. Husk det når noe stopper deg.",
+  "Å bygge noe fungerende fra bunnen er en ferdighet de færreste har.",
+  "Prosjektet ditt er et bevis på at du faktisk følger gjennom.",
+  "Tredveårene er ikke for sent. De er starten på noe annet.",
+  "Du er ikke bak skjema. Du er i ditt eget.",
+  "Alder er ikke et argument. Retning er.",
+  "Ting du angrer på er ikke sløst tid. Det er informasjon.",
+  "Det er ikke for sent å velge annerledes fra nå av.",
+  "Du har lengre tid enn du tror, og mer er mulig enn du tror.",
+  "Å se fremover er ikke å nekte fortiden. Det er å la den informere deg.",
+  "Du er ikke definisjonen på det som har vært vanskelig.",
+  "Det som er bak deg, er bak deg. Det som er foran, er ikke bestemt ennå.",
+  "Hvert år gir deg mer å bygge videre på. Det er faktisk en ressurs.",
+  "Du er ikke hvem du var. Du er hvem du er blitt.",
+  "Familie er komplisert. Det betyr ikke at den er uviktig.",
+  "Du trenger ikke ha et perfekt familieforhold for å ha et godt liv.",
+  "Å sette grenser er ikke avvisning. Det er selvrespekt.",
+  "Du er ikke ansvarlig for andres valg, bare dine egne.",
+  "Det er lov å elske noen og likevel trenge avstand.",
+  "Du bærer ikke andres skam. Det er ikke din å bære.",
+  "Å velge seg selv er ikke egoisme. Det er overlevelse noen ganger.",
+  "Relasjoner du velger aktivt betyr mer enn de du fikk tildelt.",
+  "Du er ikke nødt til å forklare deg for alle.",
+  "Det finnes folk som forstår. Du trenger ikke bruke energi på dem som ikke vil.",
+  "Å gjøre noe bra for noen andre er en av de sikreste veiene til å føle deg bra selv.",
+  "Du er ikke bare mottaker. Du er en som gir, og det merkes.",
+  "Å bidra til fellesskapet er ikke plikt. Det er noe du faktisk ønsker.",
+  "Du gjør en forskjell for folk rundt deg. Det er ikke diktet opp.",
+  "Å være til stede for noen er ikke lite. Det er noen ganger alt.",
+  "Du husker folk, og folk husker deg. Det er symmetri.",
+  "Å gjøre noe uventet snilt for noen er en superkraft.",
+  "Du gir mer enn du tar. Husk å ta imot noen ganger.",
+  "Det du bidrar med, ser ikke alltid stort ut — men det merkes.",
+  "Å bry seg er ikke svakhet. Det er styrke som ikke skryter av seg selv.",
+  "Du trenger ikke ta et gigantisk steg. Gå ett steg i dag.",
+  "Å starte er ofte det vanskeligste. Du har startet mange ganger. Du klarer det igjen.",
+  "Én god avgjørelse i dag er nok til å skifte kurs.",
+  "Du behøver ikke se hele veien. Du trenger bare å se neste steg.",
+  "Det å gjøre noe — selv lite — er uendelig mye bedre enn å vente på perfekt tidspunkt.",
+  "Du har ressurser du ikke alltid ser. Se bedre.",
+  "I dag kan du gjøre noe som fremtidig deg er glad for.",
+  "Å ta vare på seg selv er ikke egoistisk. Det er nødvendig for at du skal ha noe å gi.",
+  "Du er god nok til å prøve. Det er alt som kreves.",
+  "Fremtiden din er ikke skrevet. Du skriver den, én dag av gangen.",
+  "Du har overlevd hundre prosent av dagene dine så langt.",
+  "Bare i dag. Ikke hele resten.",
+  "Det er lov å ta en dag av gangen bokstavelig.",
+];
+
 
 // ── Felles: Drag & drop-sorterbar liste ────────────────────────────────────────
 function DragSortList({ items, onReorder, onDelete, renderLabel, accentColor, t }) {
@@ -3865,16 +4137,17 @@ function ComingSoon({ name, icon, t, onBack }) {
 }
 
 // ── Top bar ────────────────────────────────────────────────────────────────────
-function TopBar({ t, onSettings, showBack, onBack }) {
+function TopBar({ t, onSettings, showBack, onBack, title }) {
   return (
     <div style={{ padding: "20px 20px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       {showBack
         ? <button onClick={onBack} style={{ background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 10, padding: "8px 14px", color: t.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>← Hjem</button>
         : <div style={{ width: 70 }} />
       }
+      {title && <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>{title}</div>}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 11, color: t.textFaint, fontFamily: "monospace", letterSpacing: 0.5 }}>{APP_VERSION}</span>
-        <button onClick={onSettings} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 20, color: t.textMuted, padding: "4px 2px", lineHeight: 1 }}>⚙️</button>
+        {onSettings && <button onClick={onSettings} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 20, color: t.textMuted, padding: "4px 2px", lineHeight: 1 }}>⚙️</button>}
       </div>
     </div>
   );
@@ -14096,6 +14369,155 @@ function CategoryPage({ category, t, onBack, onOpenApp, darkMode, onToggleDark }
 }
 
 // ── Splash screen ──────────────────────────────────────────────────────────────
+// ── MotivasjonsarkivApp ────────────────────────────────────────────────────────
+function MotivasjonsarkivApp({ t, onBack }) {
+  const [tab, setTab] = useState("historikk"); // "historikk" | "favoritter"
+  const [favoritter, setFavoritter] = useState([]);
+  const [historikk, setHistorikk] = useState([]);
+  const [sok, setSok] = useState("");
+
+  useEffect(() => {
+    try { setFavoritter(JSON.parse(localStorage.getItem("motivasjon:favoritter") || "[]")); } catch(_) {}
+    try { setHistorikk(JSON.parse(localStorage.getItem("motivasjon:historikk") || "[]")); } catch(_) {}
+  }, []);
+
+  function fjernFavoritt(tekst) {
+    const ny = favoritter.filter(f => f !== tekst);
+    setFavoritter(ny);
+    try { localStorage.setItem("motivasjon:favoritter", JSON.stringify(ny)); } catch(_) {}
+  }
+
+  const sokLower = sok.toLowerCase();
+  const filtrertFav = favoritter.filter(t => t.toLowerCase().includes(sokLower));
+  const filtrertHist = historikk.filter(e => e.tekst.toLowerCase().includes(sokLower));
+
+  const inputSt = { width: "100%", background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 12, padding: "10px 14px", color: t.text, fontSize: 14, outline: "none" };
+
+  return (
+    <div style={{ minHeight: "100vh", background: t.bg, display: "flex", flexDirection: "column" }}>
+      <TopBar t={t} showBack onBack={onBack} title="Motivasjonsarkiv" />
+      <div style={{ padding: "0 16px 16px" }}>
+        <input value={sok} onChange={e => setSok(e.target.value)} placeholder="Søk i motivasjoner…" style={inputSt} />
+      </div>
+      {/* Tabs */}
+      <div style={{ display: "flex", borderBottom: `1px solid ${t.border}`, marginBottom: 0 }}>
+        {[["historikk","🕐 Historikk"],["favoritter","⭐ Favoritter"]].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "12px 0", background: "none", border: "none", borderBottom: tab === id ? `2px solid ${t.orange}` : "2px solid transparent", color: tab === id ? t.orange : t.textMuted, fontWeight: tab === id ? 700 : 500, fontSize: 14, cursor: "pointer", transition: "color 0.15s" }}>{label}</button>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+        {tab === "favoritter" && (
+          filtrertFav.length === 0
+            ? <div style={{ textAlign: "center", color: t.textFaint, fontSize: 14, marginTop: 48 }}>{sok ? "Ingen treff" : "Ingen favoritter ennå — stjern en motivasjon fra forsiden!"}</div>
+            : filtrertFav.map((tekst, i) => (
+                <div key={i} style={{ background: t.surface, borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: `1px solid ${t.border}`, display: "flex", gap: 12, alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, fontSize: 14, color: t.text, lineHeight: 1.55 }}>{tekst}</div>
+                  <button onClick={() => fjernFavoritt(tekst)} style={{ background: "none", border: "none", color: t.textFaint, fontSize: 18, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}>✕</button>
+                </div>
+              ))
+        )}
+        {tab === "historikk" && (
+          filtrertHist.length === 0
+            ? <div style={{ textAlign: "center", color: t.textFaint, fontSize: 14, marginTop: 48 }}>{sok ? "Ingen treff" : "Historikk bygger seg opp etter hvert."}</div>
+            : [...filtrertHist].reverse().map((entry, i) => (
+                <div key={i} style={{ background: t.surface, borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: `1px solid ${t.border}` }}>
+                  <div style={{ fontSize: 11, color: t.textFaint, marginBottom: 6 }}>{new Date(entry.date + "T12:00:00").toLocaleDateString("nb-NO", { weekday: "long", day: "numeric", month: "long" })}</div>
+                  <div style={{ fontSize: 14, color: t.text, lineHeight: 1.55 }}>{entry.tekst}</div>
+                  {favoritter.includes(entry.tekst) && <div style={{ fontSize: 11, color: t.orange, marginTop: 6 }}>⭐ Favoritt</div>}
+                </div>
+              ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── MotivasjonKort ─────────────────────────────────────────────────────────────
+function MotivasjonKort({ t, onOpenArkiv }) {
+  const [motivasjon, setMotivasjon] = useState("");
+  const [erFavoritt, setErFavoritt] = useState(false);
+  const [shuffleFlash, setShuffleFlash] = useState(false);
+
+  function todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+
+  function hentFavoritter() {
+    try { return JSON.parse(localStorage.getItem("motivasjon:favoritter") || "[]"); } catch(_) { return []; }
+  }
+
+  function lagreHistorikk(tekst, dato) {
+    try {
+      const hist = JSON.parse(localStorage.getItem("motivasjon:historikk") || "[]");
+      if (!hist.some(e => e.tekst === tekst && e.date === dato)) {
+        hist.push({ date: dato, tekst });
+        localStorage.setItem("motivasjon:historikk", JSON.stringify(hist));
+      }
+    } catch(_) {}
+  }
+
+  function velgMotivasjon(forceNy = false) {
+    const dato = todayStr();
+    if (!forceNy) {
+      try {
+        const lagret = JSON.parse(localStorage.getItem("motivasjon:dag") || "null");
+        if (lagret && lagret.date === dato) {
+          setMotivasjon(lagret.tekst);
+          setErFavoritt(hentFavoritter().includes(lagret.tekst));
+          return;
+        }
+      } catch(_) {}
+    }
+    // Velg tilfeldig, unngå gjeldende
+    let idx;
+    do { idx = Math.floor(Math.random() * MOTIVASJONER.length); }
+    while (MOTIVASJONER[idx] === motivasjon && MOTIVASJONER.length > 1);
+    const tekst = MOTIVASJONER[idx];
+    setMotivasjon(tekst);
+    setErFavoritt(hentFavoritter().includes(tekst));
+    try { localStorage.setItem("motivasjon:dag", JSON.stringify({ date: dato, tekst })); } catch(_) {}
+    lagreHistorikk(tekst, dato);
+  }
+
+  useEffect(() => { velgMotivasjon(false); }, []);
+
+  function toggleFavoritt() {
+    const favs = hentFavoritter();
+    let nyFavs;
+    if (favs.includes(motivasjon)) {
+      nyFavs = favs.filter(f => f !== motivasjon);
+      setErFavoritt(false);
+    } else {
+      nyFavs = [...favs, motivasjon];
+      setErFavoritt(true);
+    }
+    try { localStorage.setItem("motivasjon:favoritter", JSON.stringify(nyFavs)); } catch(_) {}
+  }
+
+  function shuffle() {
+    setShuffleFlash(true);
+    setTimeout(() => setShuffleFlash(false), 300);
+    velgMotivasjon(true);
+  }
+
+  if (!motivasjon) return null;
+
+  return (
+    <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 20, padding: "16px 18px", marginBottom: 14, transition: "opacity 0.2s", opacity: shuffleFlash ? 0.3 : 1 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: t.orange, letterSpacing: 0.8, textTransform: "uppercase" }}>✨ Dagens motivasjon</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={toggleFavoritt} title={erFavoritt ? "Fjern favoritt" : "Legg til favoritt"} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", padding: "2px 4px", color: erFavoritt ? t.orange : t.textFaint, transition: "color 0.15s" }}>{erFavoritt ? "⭐" : "☆"}</button>
+          <button onClick={shuffle} title="Ny motivasjon" style={{ background: "none", border: "none", fontSize: 16, cursor: "pointer", padding: "2px 4px", color: t.textMuted }}>🔀</button>
+          <button onClick={onOpenArkiv} title="Åpne arkiv" style={{ background: "none", border: "none", fontSize: 13, cursor: "pointer", padding: "3px 8px", color: t.textMuted, borderRadius: 8, border: `1px solid ${t.border}` }}>Arkiv</button>
+        </div>
+      </div>
+      <div style={{ fontSize: 15, color: t.text, lineHeight: 1.6, fontStyle: "italic" }}>"{motivasjon}"</div>
+    </div>
+  );
+}
+
 function SplashScreen({ t, onSelect, darkMode, onToggleDark }) {
   const [showSettings, setShowSettings] = useState(false);
   const [pulse, setPulse] = useState(false);
@@ -14241,6 +14663,11 @@ function SplashScreen({ t, onSelect, darkMode, onToggleDark }) {
               ? <div style={{ background: t.green, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "#fff" }}>Husk!</div>
               : null}
         </button>
+
+        {/* Motivasjonskort */}
+        <div style={{ marginTop: 14 }}>
+          <MotivasjonKort t={t} onOpenArkiv={() => onSelect("app:motivasjonsarkiv")} />
+        </div>
 
         <div style={{ paddingTop: 16, paddingBottom: 12, textAlign: "center" }}>
           <span style={{ fontSize: 11, color: t.textFaint }}>
@@ -14568,6 +14995,7 @@ function Hub() {
   if (screen === "app:drommer")    return <P><DrommerApp t={t} onBack={() => navigateTo("fritid")} /></P>;
   if (screen === "app:kor")      return <P><KorApp t={t} onBack={() => navigateTo("fritid")} /></P>;
   if (screen === "app:gladidag") return <P><GladIDagApp t={t} onBack={() => navigateTo("splash")} /></P>;
+  if (screen === "app:motivasjonsarkiv") return <P><MotivasjonsarkivApp t={t} onBack={() => navigateTo("splash")} /></P>;
 
   // ── Hemmelig screens ──
   if (screen === "hemmelig") {
