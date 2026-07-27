@@ -90,7 +90,7 @@ function useFadeIn() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.22-04";
+const APP_VERSION = "2026.07.27-03";
 
 // ── Motivasjoner (336 oppføringer) ────────────────────────────────────────────
 // Storage: motivasjon:dag { date, index, tekst }
@@ -10653,6 +10653,154 @@ function KinkProfil({ vurderinger, t }) {
   );
 }
 
+function KinkAnalyse({ vurderinger, t }) {
+  const allItems = KINK_KATEGORIER.flatMap(k => k.items.map(i => ({ ...i, katId: k.id, katNavn: k.navn })));
+  const vurdert = allItems.filter(i => vurderinger[i.id]);
+
+  // Live-beregnede tall
+  const count = (sk) => allItems.filter(i => vurderinger[i.id] === sk).length;
+  const nFav = count("favoritt"), nLiker = count("liker"), nNoytral = count("nøytral"),
+        nKanskje = count("kanskje"), nGrense = count("grense");
+  const totVurdert = vurdert.length;
+
+  // Gi/motta-asymmetrier (samme navn vurdert ulikt for gi vs motta)
+  const byNavn = {};
+  allItems.forEach(i => {
+    if (i.gr === true || i.gr === false) {
+      if (!byNavn[i.navn]) byNavn[i.navn] = {};
+      byNavn[i.navn][i.gr ? "gi" : "mot"] = vurderinger[i.id] || "";
+    }
+  });
+  const asymmetrier = Object.entries(byNavn)
+    .filter(([, d]) => d.gi && d.mot && d.gi !== d.mot)
+    .map(([navn, d]) => ({ navn, gi: d.gi, mot: d.mot }));
+
+  // Dominerende status per kategori
+  const katProfil = KINK_KATEGORIER.map(k => {
+    const items = k.items.filter(i => vurderinger[i.id]);
+    const c = { favoritt:0, liker:0, nøytral:0, kanskje:0, grense:0 };
+    items.forEach(i => { const s = vurderinger[i.id]; if (c[s]!==undefined) c[s]++; });
+    return { navn: k.navn, count: items.length, ...c };
+  }).filter(k => k.count > 0);
+
+  const sec = { background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 16, marginBottom: 14 };
+  const h = { fontSize: 14, fontWeight: 800, color: "#c084fc", marginBottom: 10 };
+  const body = { fontSize: 13, color: t.text, lineHeight: 1.6 };
+  const muted = { fontSize: 12, color: t.textMuted, lineHeight: 1.55 };
+
+  const StatChip = ({ emoji, label, n, color }) => (
+    <div style={{ flex: "1 1 auto", minWidth: 92, background: color+"12", border: `1px solid ${color}35`, borderRadius: 12, padding: "10px 12px" }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color }}>{n}</div>
+      <div style={{ fontSize: 11, color: t.textMuted, marginTop: 2 }}>{emoji} {label}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "0 16px 40px" }}>
+      {/* Intro */}
+      <div style={{ ...sec, borderColor: "#c084fc40" }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#c084fc", marginBottom: 6 }}>🔍 Din kink-analyse</div>
+        <div style={muted}>Tallene oppdateres live fra vurderingene dine. Tolkningen under er skrevet ut fra mønsteret i profilen — les den som et speil, ikke en fasit.</div>
+      </div>
+
+      {/* Live tall */}
+      <div style={sec}>
+        <div style={h}>Oversikt ({totVurdert} vurdert)</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <StatChip emoji="⭐" label="Favoritter" n={nFav} color="#f472b6" />
+          <StatChip emoji="💚" label="Liker" n={nLiker} color="#22c55e" />
+          <StatChip emoji="🟠" label="Kanskje" n={nKanskje} color="#f97316" />
+          <StatChip emoji="💛" label="Likegyldig" n={nNoytral} color="#eab308" />
+          <StatChip emoji="🔴" label="Grenser" n={nGrense} color="#ef4444" />
+        </div>
+        <div style={{ ...muted, marginTop: 12 }}>
+          Du vet tydelig hva du liker <b>og</b> hva du ikke vil ha — {nFav} favoritter mot {nGrense} klare grenser.
+          Det er en ryddig, selvbevisst profil uten mye «alt er litt spennende»-vaghet.
+        </div>
+      </div>
+
+      {/* Hvem du er */}
+      <div style={sec}>
+        <div style={h}>Hvem du er som kinkster</div>
+        <div style={body}>
+          <p style={{ margin: "0 0 12px" }}><b style={{ color: "#f472b6" }}>Sensuell hedonist, ikke smerte-søker.</b> Det klareste mønsteret i hele profilen: nytelse, kontroll og psykologi driver deg — ikke fysisk smerte. «Smerte & intensitet» og «Ekstremt & tabu» er nesten utelukkende grenser.</p>
+          <p style={{ margin: "0 0 12px" }}><b style={{ color: "#c084fc" }}>Switch med retning.</b> Du elsker maktdynamikk begge veier, men når det gjelder hardhet (spanking, choking, caning, klaps) er du komfortabel med å <i>gi</i>, ikke <i>motta</i>. Din submisjon er <i>psykologisk</i> (orgasmekontroll, kyskhet, edging, tvunget orgasme) — ikke smertebasert.</p>
+          <p style={{ margin: "0 0 12px" }}><b style={{ color: "#f472b6" }}>Oral- og genital-dyrking er kjernen.</b> Blowjob, deepthroat, cock/ball worship, rimming, forhudsleker, prostata, docking — en kroppslig, tilstedeværende seksualitet som dyrker selve mannskroppen.</p>
+          <p style={{ margin: "0 0 12px" }}><b style={{ color: "#c084fc" }}>Deling og å bli sett er stort.</b> Gruppesex/deling scorer nesten maks. Sammen med voyeurisme, ekshibisjonisme, glory hole, badehus og cuckold-voyeur: du får ladning av det <i>sosiale og observerte</i> — fellesskap, blikk, det halvoffentlige.</p>
+          <p style={{ margin: 0 }}><b style={{ color: "#22c55e" }}>Tydelig romantisk åre.</b> Kos, aftercare, romantisk sex, komme samtidig — alle favoritter. Maktspillet balanseres av nærhet. Du tar dynamikken på alvor og bryr deg om ivaretakelse.</p>
+        </div>
+      </div>
+
+      {/* Gi/motta live */}
+      {asymmetrier.length > 0 && (
+        <div style={sec}>
+          <div style={h}>Gi vs. motta ({asymmetrier.length} skiller seg)</div>
+          <div style={{ ...muted, marginBottom: 10 }}>Der du vurderer det ulikt å gi og å motta — ofte er du med på å <i>gi</i> mens grensen går ved å <i>motta</i>:</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {asymmetrier.map(a => {
+              const gi = KINK_STATUS[a.gi], mot = KINK_STATUS[a.mot];
+              return (
+                <div key={a.navn} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: t.text }}>
+                  <span style={{ flex: 1 }}>{a.navn}</span>
+                  <span style={{ color: gi.color || t.textMuted }}>{gi.emoji} gi</span>
+                  <span style={{ color: t.textFaint }}>›</span>
+                  <span style={{ color: mot.color || t.textMuted }}>{mot.emoji} mot</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Kategori-profil live */}
+      <div style={sec}>
+        <div style={h}>Per kategori</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {katProfil.map(k => {
+            const seg = [
+              { n: k.favoritt, c: "#f472b6" }, { n: k.liker, c: "#22c55e" },
+              { n: k.kanskje, c: "#f97316" }, { n: k.nøytral, c: "#eab308" },
+              { n: k.grense, c: "#ef4444" },
+            ].filter(s => s.n > 0);
+            return (
+              <div key={k.navn}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: t.text, marginBottom: 4 }}>
+                  <span>{k.navn}</span><span style={{ color: t.textFaint }}>{k.count}</span>
+                </div>
+                <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", background: t.surface2 }}>
+                  {seg.map((s,idx) => <div key={idx} style={{ flex: s.n, background: s.c }} />)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Grenser-tolkning */}
+      <div style={{ ...sec, borderColor: "#ef444430" }}>
+        <div style={{ ...h, color: "#ef4444" }}>Hvor grensene går</div>
+        <div style={body}>Grensene dine er ikke tilfeldige — de klynger seg rundt tre ting: <b>fysisk smerte mottatt</b>, <b>kroppsvæsker/lukt/urenhet</b> (scat, watersports, spytt, svette — konsekvent avvist), og <b>ekte fare/tap av kontroll</b> (hard choking, blood play, snuff, somnofili). Du vil ha det <i>rent, trygt og bevisst</i> — også de mørkere fantasiene, innenfor klare samtykkende rammer. Sunne, konsistente grenser.</div>
+      </div>
+
+      {/* Anbefalinger */}
+      <div style={{ ...sec, borderColor: "#22c55e40" }}>
+        <div style={{ ...h, color: "#22c55e" }}>💡 Verdt å utforske</div>
+        <div style={body}>
+          <p style={{ margin: "0 0 10px" }}><b>Verbal/psykologisk dominans.</b> «Kanskje»-ene dine (name calling, verbal dominans, mild humiliation, CNC) peker samme vei — en trygg utvidelse av maktspillet du elsker, uten å røre noen grense.</p>
+          <p style={{ margin: "0 0 10px" }}><b>Kyskhets-spill over tid.</b> Du har alle byggeklossene som favoritter. Å knytte cock cage + edging + orgasmenektelse sammen i en lengre dynamikk (dager, ikke minutter) er en dyp brønn du så vidt har åpnet.</p>
+          <p style={{ margin: "0 0 10px" }}><b>Delings-/observasjons-siden.</b> Badehus, glory hole, sauna, se-på-andre-par er favoritter — kanskje ditt mest «ufullførte» høy-interesse-område i praksis. Mye å oppsøke her.</p>
+          <p style={{ margin: 0 }}><b>Milde sanseleker.</b> Varm voks, brystklypere, fjær/Wartenberg-hjul — lav risiko, sanselig snarere enn smertefull. Passer perfekt til nytelsesorienteringen din.</p>
+        </div>
+      </div>
+
+      {/* Oppsummering */}
+      <div style={{ ...sec, background: "#c084fc12", borderColor: "#c084fc40", marginBottom: 0 }}>
+        <div style={body}><b>Kort sagt:</b> du er en sensuell, mannsdyrkende switch med sterk dragning mot deling, blikk og psykologisk maktspill — grunnfestet i nærhet og trygghet, ikke smerte. En «pleasure dom/sub» mer enn en «pain player». De mest lovende veiene videre ligger i det verbale/psykologiske og det sosiale/observerte — akkurat der du allerede har flest favoritter.</div>
+      </div>
+    </div>
+  );
+}
+
 function KinkProfilApp({ t, onBack }) {
   const [loaded, setLoaded] = useState(false);
   const [vurderinger, setVurderinger] = useState({});
@@ -10675,6 +10823,7 @@ function KinkProfilApp({ t, onBack }) {
     if (!sk) delete nv[key];
     setVurderinger(nv);
     kinkSaveV(nv);
+    if (sk === "kanskje" || sk === "grense") blLeggTilFraKink(key, sk);
   }
 
   function setNotat(key, val) {
@@ -10755,7 +10904,7 @@ function KinkProfilApp({ t, onBack }) {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 8, padding: "12px 20px 0" }}>
-        {[["liste","📋 Liste"],["profil","✨ Profil"]].map(([id,lbl]) => (
+        {[["liste","📋 Liste"],["profil","✨ Profil"],["analyse","🔍 Analyse"]].map(([id,lbl]) => (
           <button key={id} onClick={() => setTab(id)}
             style={{ padding: "8px 18px", borderRadius: 20, border: `1px solid ${tab===id ? "#c084fc" : t.border}`,
               background: tab===id ? "#c084fc20" : "transparent", color: tab===id ? "#c084fc" : t.textMuted,
@@ -10820,6 +10969,7 @@ function KinkProfilApp({ t, onBack }) {
       )}
 
       {tab === "profil" && <KinkProfil vurderinger={vurderinger} t={t} />}
+      {tab === "analyse" && <KinkAnalyse vurderinger={vurderinger} t={t} />}
     </div>
   );
 }
@@ -10841,6 +10991,75 @@ function blBlankVilIkke() {
   return { id: "bln" + Date.now(), navn: "", forklaring: "" };
 }
 
+// Slå opp kink-navn fra id
+function kinkNavnFor(kinkId) {
+  for (const kat of KINK_KATEGORIER) {
+    const item = kat.items.find(i => i.id === kinkId);
+    if (item) return item.navn;
+  }
+  return null;
+}
+
+// Kopier en kink inn i bucketlisten (én vei) når status settes til kanskje/grense.
+// kanskje → vil (prøve), grense → vilIkke. Hopper over hvis den allerede er kopiert.
+function blLeggTilFraKink(kinkId, status) {
+  const navn = kinkNavnFor(kinkId);
+  if (!navn) return;
+  const data = blLoad();
+  if (status === "kanskje") {
+    if (data.vil.some(i => i.fraKinkId === kinkId)) return;
+    data.vil = [...data.vil, {
+      id: "bl" + Date.now() + Math.floor(Math.random()*1000),
+      navn, prioritet: 3, gjort: false, gjortDato: "", notat: "",
+      fraKink: true, fraKinkId: kinkId
+    }];
+    blSave(data);
+  } else if (status === "grense") {
+    if (data.vilIkke.some(i => i.fraKinkId === kinkId)) return;
+    data.vilIkke = [...data.vilIkke, {
+      id: "bln" + Date.now() + Math.floor(Math.random()*1000),
+      navn, forklaring: "",
+      fraKink: true, fraKinkId: kinkId
+    }];
+    blSave(data);
+  }
+}
+
+// Engangs-import: kopier ALLE nåværende kanskje/grense fra kink-profilen
+// inn i bucketlisten. Hopper over dem som allerede er kopiert. Returnerer antall lagt til.
+function blImporterAlleFraKink() {
+  let vurderinger = {};
+  try {
+    const v = localStorage.getItem("hemmelig:kink:vurderinger");
+    vurderinger = v ? JSON.parse(v) : {};
+  } catch(_) { return 0; }
+  const data = blLoad();
+  let lagtTil = 0;
+  Object.entries(vurderinger).forEach(([kinkId, status]) => {
+    const navn = kinkNavnFor(kinkId);
+    if (!navn) return;
+    if (status === "kanskje") {
+      if (data.vil.some(i => i.fraKinkId === kinkId)) return;
+      data.vil.push({
+        id: "bl" + Date.now() + Math.floor(Math.random()*100000),
+        navn, prioritet: 3, gjort: false, gjortDato: "", notat: "",
+        fraKink: true, fraKinkId: kinkId
+      });
+      lagtTil++;
+    } else if (status === "grense") {
+      if (data.vilIkke.some(i => i.fraKinkId === kinkId)) return;
+      data.vilIkke.push({
+        id: "bln" + Date.now() + Math.floor(Math.random()*100000),
+        navn, forklaring: "",
+        fraKink: true, fraKinkId: kinkId
+      });
+      lagtTil++;
+    }
+  });
+  if (lagtTil > 0) blSave(data);
+  return lagtTil;
+}
+
 function BucketlistApp({ t, onBack }) {
   const [data, setData] = useState({ vil: [], vilIkke: [] });
   const [loaded, setLoaded] = useState(false);
@@ -10851,9 +11070,17 @@ function BucketlistApp({ t, onBack }) {
   const [showAddVilIkke, setShowAddVilIkke] = useState(false);
   const [newVil, setNewVil] = useState(blBlankVil());
   const [newVilIkke, setNewVilIkke] = useState(blBlankVilIkke());
+  const [importMsg, setImportMsg] = useState("");
 
   useEffect(() => { setData(blLoad()); setLoaded(true); }, []);
   function save(updated) { setData(updated); blSave(updated); }
+
+  function importerFraKink() {
+    const n = blImporterAlleFraKink();
+    setData(blLoad());
+    setImportMsg(n > 0 ? `✓ Importerte ${n} fra kink-profilen` : "Alt fra kink-profilen er allerede importert");
+    setTimeout(() => setImportMsg(""), 3500);
+  }
 
   function addVil() {
     if (!newVil.navn.trim()) return;
@@ -10966,6 +11193,16 @@ function BucketlistApp({ t, onBack }) {
         </button>
       </div>
 
+      {/* Import fra kink-profil */}
+      <div style={{ padding: "10px 20px 0" }}>
+        <button onClick={importerFraKink}
+          style={{ width: "100%", padding: "9px", borderRadius: 10, border: `1px solid #f97316`,
+            background: "#f9731615", color: "#f97316", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          🟠 Importer fra kink-profil
+        </button>
+        {importMsg && <div style={{ fontSize: 12, color: t.textMuted, textAlign: "center", marginTop: 8 }}>{importMsg}</div>}
+      </div>
+
       {/* Add form — Vil prøve */}
       {showAddVil && (
         <div style={{ margin: "12px 20px 0", background: t.surface, border: `1px solid #22c55e40`, borderRadius: 14, padding: 16 }}>
@@ -11022,7 +11259,7 @@ function BucketlistApp({ t, onBack }) {
                   {item.gjort ? "✓" : ""}
                 </button>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: t.text, textDecoration: item.gjort ? "line-through" : "none" }}>{item.navn}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: t.text, textDecoration: item.gjort ? "line-through" : "none" }}>{item.fraKink && <span title="Fra kink-profil" style={{ marginRight: 5 }}>🟠</span>}{item.navn}</div>
                   <div style={{ display: "flex", gap: 6, marginTop: 3 }}>
                     <span style={{ fontSize: 11, color: "#22c55e" }}>{"★".repeat(item.prioritet)}{"☆".repeat(5-item.prioritet)}</span>
                     {item.gjort && item.gjortDato && <span style={{ fontSize: 11, color: t.textFaint }}>✓ {item.gjortDato}</span>}
@@ -11046,7 +11283,7 @@ function BucketlistApp({ t, onBack }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 18 }}>🚫</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.navn}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{item.fraKink && <span title="Fra kink-profil" style={{ marginRight: 5 }}>🟠</span>}{item.navn}</div>
                   {item.forklaring && <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>{item.forklaring}</div>}
                 </div>
                 <button onClick={() => { setEditItem(item); setEditType("vilIkke"); }}
