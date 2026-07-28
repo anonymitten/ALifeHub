@@ -33,11 +33,11 @@ const { useState, useEffect, useRef, useMemo } = React;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Kalender — egen app som leser LifeHub sine localStorage-nøkler (samme origin)
-//  Versjon: 2026.07.28-05
-//  Nye nøkler den eier selv: kalender:hendelser, kalender:settings
+//  Versjon: 2026.07.28-07
+//  Nye nøkler den eier selv: kalender:hendelser, kalender:settings, kalender:feeds
 // ═══════════════════════════════════════════════════════════════════════════
 
-const VERSION = "2026.07.28-05";
+const VERSION = "2026.07.28-07";
 
 // ── Tema (mørkt, blå=Arbeid, oransje=Fritid) ────────────────────────────────
 const T = {
@@ -410,6 +410,9 @@ function buildEvents(from, to, settings) {
 
   // ── Glad i Dag: ikke eget ikon, men hentes til dagsvisning separat ──
 
+  // ── Importerte kalender-feeds (ICS fra Google Calendar) ──
+  buildFeedEvents(from, to, settings).forEach(e => push(e));
+
   return events;
 }
 
@@ -417,6 +420,160 @@ function buildEvents(from, to, settings) {
 function gladForDate(dato) {
   const entries = lsGet("gladidag:entries", {});
   return entries[dato] || null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ICS-IMPORT (Google Calendar feeds via Apps Script-proxy)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Enkel ICS-parser: returnerer [{ uid, dato, sluttDato, tid, sluttTid, tittel, sted, allDay }]
+// Håndterer VEVENT med DTSTART/DTEND (dato eller datetime), folding og grunnleggende escaping.
+function parseICS(text) {
+  if (!text) return [];
+  // Unfold: linjer som starter med mellomrom/tab er fortsettelse av forrige
+  const raw = text.replace(/\r\n/g, "\n").replace(/\n[ \t]/g, "");
+  const linjer = raw.split("\n");
+  const events = [];
+  let cur = null;
+  for (const linje of linjer) {
+    if (linje === "BEGIN:VEVENT") { cur = {}; continue; }
+    if (linje === "END:VEVENT") { if (cur && cur._start) events.push(finishEvent(cur)); cur = null; continue; }
+    if (!cur) continue;
+    const kolon = linje.indexOf(":");
+    if (kolon < 0) continue;
+    const venstre = linje.slice(0, kolon);
+    const verdi = linje.slice(kolon + 1);
+    const felt = venstre.split(";")[0].toUpperCase();
+    if (felt === "DTSTART") { cur._start = verdi; cur._startParams = venstre; }
+    else if (felt === "DTEND") { cur._end = verdi; cur._endParams = venstre; }
+    else if (felt === "SUMMARY") cur.tittel = unescapeICS(verdi);
+    else if (felt === "LOCATION") cur.sted = unescapeICS(verdi);
+    else if (felt === "UID") cur.uid = verdi;
+    else if (felt === "RRULE") cur._rrule = verdi;
+  }
+  return events;
+}
+
+function unescapeICS(s) {
+  return s.replace(/\\n/gi, " ").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\");
+}
+
+// Tolk en ICS-datoverdi. Returnerer { ymd, tid|null, allDay }
+function parseICSDate(val, params) {
+  if (!val) return null;
+  const erDato = (params && /VALUE=DATE/i.test(params)) || /^\d{8}$/.test(val);
+  if (erDato) {
+    const m = val.match(/(\d{4})(\d{2})(\d{2})/);
+    if (!m) return null;
+    return { ymd: `${m[1]}-${m[2]}-${m[3]}`, tid: null, allDay: true };
+  }
+  // datetime: 20260815T183000Z eller uten Z (lokal)
+  const m = val.match(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?/);
+  if (!m) return null;
+  const erUTC = !!m[7];
+  if (erUTC) {
+    // konverter UTC → lokal tid
+    const d = new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
+    return { ymd: `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`,
+             tid: `${pad(d.getHours())}:${pad(d.getMinutes())}`, allDay: false };
+  }
+  return { ymd: `${m[1]}-${m[2]}-${m[3]}`, tid: `${m[4]}:${m[5]}`, allDay: false };
+}
+
+function finishEvent(cur) {
+  const start = parseICSDate(cur._start, cur._startParams);
+  const end = cur._end ? parseICSDate(cur._end, cur._endParams) : null;
+  return {
+    uid: cur.uid || (cur._start + (cur.tittel || "")),
+    dato: start ? start.ymd : null,
+    tid: start ? start.tid : null,
+    allDay: start ? start.allDay : true,
+    sluttDato: end ? end.ymd : (start ? start.ymd : null),
+    tittel: cur.tittel || "(uten tittel)",
+    sted: cur.sted || "",
+    rrule: cur._rrule || null,
+  };
+}
+
+// Ekspander en ICS-hendelse med enkel RRULE (WEEKLY/MONTHLY/YEARLY + evt COUNT/UNTIL) innen [from,to]
+function expandICSEvent(ev, fromY, toY) {
+  const ut = [];
+  if (!ev.dato) return ut;
+  const flerDagers = ev.sluttDato && ev.sluttDato !== ev.dato && ev.allDay;
+
+  function leggTil(startYmd) {
+    if (flerDagers) {
+      // all-day-hendelse som spenner flere dager (DTEND er eksklusiv i ICS)
+      let d = parseYmd(startYmd);
+      const slutt = parseYmd(shiftYmd(startYmd, ev.dato, ev.sluttDato));
+      let g = 0;
+      while (d < slutt && g++ < 60) {
+        const y = ymd(d);
+        if (y >= fromY && y <= toY) ut.push({ ...ev, dato: y });
+        d = addDays(d, 1);
+      }
+    } else {
+      if (startYmd >= fromY && startYmd <= toY) ut.push({ ...ev, dato: startYmd });
+    }
+  }
+
+  if (!ev.rrule) { leggTil(ev.dato); return ut; }
+
+  // Parse enkel RRULE
+  const parts = {};
+  ev.rrule.split(";").forEach(p => { const [k,v] = p.split("="); parts[k.toUpperCase()] = v; });
+  const freq = parts.FREQ;
+  const interval = parseInt(parts.INTERVAL) || 1;
+  const count = parts.COUNT ? parseInt(parts.COUNT) : null;
+  let until = null;
+  if (parts.UNTIL) { const m = parts.UNTIL.match(/(\d{4})(\d{2})(\d{2})/); if (m) until = `${m[1]}-${m[2]}-${m[3]}`; }
+
+  let cur = parseYmd(ev.dato);
+  let n = 0, guard = 0;
+  while (guard++ < 1000) {
+    const y = ymd(cur);
+    if (until && y > until) break;
+    if (count !== null && n >= count) break;
+    if (y > toY) break;
+    n++;
+    leggTil(y);
+    if (freq === "WEEKLY") cur = addDays(cur, 7 * interval);
+    else if (freq === "MONTHLY") { cur = new Date(cur); cur.setMonth(cur.getMonth() + interval); }
+    else if (freq === "YEARLY") { cur = new Date(cur); cur.setFullYear(cur.getFullYear() + interval); }
+    else if (freq === "DAILY") cur = addDays(cur, interval);
+    else break;
+  }
+  return ut;
+}
+// hjelper: forskyv sluttdato relativt (brukes for flerdagers)
+function shiftYmd(nyStart, gammelStart, gammelSlutt) {
+  const diff = Math.round((parseYmd(gammelSlutt) - parseYmd(gammelStart)) / 86400000);
+  return ymd(addDays(parseYmd(nyStart), diff));
+}
+
+// Bygg hendelser fra alle importerte feeds (leser cachet ICS fra kalender:feeds)
+function buildFeedEvents(from, to, settings) {
+  const feeds = lsGet("kalender:feeds", []);
+  const toggles = settings.toggles || {};
+  const fromY = ymd(from), toY = ymd(to);
+  const out = [];
+  feeds.forEach(feed => {
+    if (toggles["feed:" + feed.id] === false) return;
+    if (!feed.cache) return;
+    const parsed = parseICS(feed.cache);
+    parsed.forEach(ev => {
+      expandICSEvent(ev, fromY, toY).forEach(occ => {
+        out.push({
+          id: `feed-${feed.id}-${occ.uid}-${occ.dato}`,
+          dato: occ.dato, kat: "feed:" + feed.id, ikon: feed.emoji || "📅",
+          tittel: occ.tittel, tid: occ.tid || null, allDay: occ.allDay,
+          type: "plan", farge: feed.farge || T.fritid, kilde: "feed",
+          feedNavn: feed.navn, sted: occ.sted,
+        });
+      });
+    });
+  });
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -511,6 +668,26 @@ function EventIcon({ ev, unlocked, size = 15 }) {
   );
 }
 
+// Kollaps en liste hendelser til visnings-ikoner:
+// - maks 2 av samme emoji (1 = én hendelse, 2 = flere av samme type)
+// - private (låste) vises som 🔒 og dedupliseres på 🔒 med egen grense (lockMax)
+// Returnerer array av { ev, key } klare til rendering, i opprinnelig rekkefølge.
+function collapseIcons(evs, unlocked, lockMax) {
+  const teller = {};        // synlig symbol → antall vist
+  const ut = [];
+  evs.forEach((ev, idx) => {
+    const skjult = ev.privat && !unlocked;
+    const symbol = skjult ? "🔒" : (ev.ikon || "📌");
+    const max = symbol === "🔒" ? lockMax : 2;
+    const n = teller[symbol] || 0;
+    if (n < max) {
+      teller[symbol] = n + 1;
+      ut.push({ ev, key: symbol + "-" + idx });
+    }
+  });
+  return ut;
+}
+
 // ── Månedsvisning ───────────────────────────────────────────────────────────
 function MonthView({ cursor, events, unlocked, onSelectDay }) {
   const year = cursor.getFullYear(), month = cursor.getMonth();
@@ -564,16 +741,16 @@ function MonthView({ cursor, events, unlocked, onSelectDay }) {
               {isPast && loggEvs.length > 0 ? (
                 <>
                   <div style={iconRowStyle(true)}>
-                    {planEvs.slice(0,6).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={14} />)}
+                    {collapseIcons(planEvs, unlocked, 2).map(({ev,key}) => <EventIcon key={key} ev={ev} unlocked={unlocked} size={14} />)}
                   </div>
                   <div style={{ height: 1, background: T.border, margin: "1px 0" }} />
                   <div style={iconRowStyle(false)}>
-                    {loggEvs.slice(0,6).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={14} />)}
+                    {collapseIcons(loggEvs, unlocked, 1).map(({ev,key}) => <EventIcon key={key} ev={ev} unlocked={unlocked} size={14} />)}
                   </div>
                 </>
               ) : (
                 <div style={iconRowStyle(true)}>
-                  {evs.slice(0,9).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={14} />)}
+                  {collapseIcons(evs, unlocked, 2).map(({ev,key}) => <EventIcon key={key} ev={ev} unlocked={unlocked} size={14} />)}
                 </div>
               )}
             </button>
@@ -695,11 +872,15 @@ function DayView({ date, events, unlocked, settings, onClose, onAddEgen, onEditE
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {skjul ? "Privat oppføring" : e.tittel}
                       </div>
-                      {!skjul && (e.tid || (e.raw && e.raw.sted)) && (
-                        <div style={{ fontSize: 12, color: T.textFaint }}>
-                          {e.tid || ""}{e.tid && e.raw && e.raw.sted ? " · " : ""}{e.raw && e.raw.sted ? "📍 " + e.raw.sted : ""}
-                        </div>
-                      )}
+                      {(() => {
+                        const sted = e.sted || (e.raw && e.raw.sted) || "";
+                        if (skjul || (!e.tid && !sted)) return null;
+                        return (
+                          <div style={{ fontSize: 12, color: T.textFaint }}>
+                            {e.tid || ""}{e.tid && sted ? " · " : ""}{sted ? "📍 " + sted : ""}
+                          </div>
+                        );
+                      })()}
                     </div>
                     {e.egen && !skjul && <span style={{ fontSize: 12, color: T.textFaint }}>›</span>}
                   </div>
@@ -893,11 +1074,99 @@ function EgenEditor({ entry, defaultDato, onSave, onDelete, settings, onChangeSe
 }
 
 // ── Settings ────────────────────────────────────────────────────────────────
-function SettingsPanel({ settings, onChange, onClose }) {
+const FEED_EMOJI_FORSLAG = ["🦓","🤵","👤","🎵","📅","🎭","🏫","⛪","👥","🎓"];
+const FEED_FARGE_FORSLAG = [
+  { navn: "Oransje", val: "#ff9a3c" }, { navn: "Blå", val: "#4a9eff" },
+  { navn: "Grønn", val: "#2ec26a" }, { navn: "Lilla", val: "#b57edc" },
+  { navn: "Rosa", val: "#f56fa1" }, { navn: "Gul", val: "#e8c34a" },
+  { navn: "Cyan", val: "#3cc9c0" }, { navn: "Rød", val: "#ef6a5a" },
+];
+
+function FeedEditor({ feed, onSave, onCancel }) {
+  const [navn, setNavn] = useState(feed ? feed.navn : "");
+  const [url, setUrl] = useState(feed ? feed.url : "");
+  const [emoji, setEmoji] = useState(feed ? feed.emoji : "📅");
+  const [farge, setFarge] = useState(feed ? feed.farge : "#ff9a3c");
+
+  function lagre() {
+    if (!navn.trim() || !url.trim()) return;
+    onSave({
+      id: feed ? feed.id : "f" + Date.now(),
+      navn: navn.trim(), url: url.trim(), emoji, farge,
+      cache: feed ? feed.cache : null,
+      sisteHenting: feed ? feed.sisteHenting : null,
+      sisteFeil: feed ? feed.sisteFeil : null,
+    });
+  }
+
+  return (
+    <div style={{ background: T.bgCard2, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+      <label style={labelStyle}>Navn</label>
+      <input value={navn} onChange={e => setNavn(e.target.value)} placeholder="F.eks. Knauskoret" style={inputStyle} autoFocus />
+
+      <label style={labelStyle}>iCal-lenke (hemmelig .ics-adresse)</label>
+      <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://calendar.google.com/…/basic.ics"
+        style={{ ...inputStyle, fontSize: 12 }} />
+
+      <label style={labelStyle}>Emoji</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ fontSize: 24, width: 42, height: 42, borderRadius: 10, background: T.bgSheet,
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{emoji}</div>
+        <input value={emoji} onChange={e => { const v = [...e.target.value].slice(-1)[0]; if (v) setEmoji(v); }}
+          style={{ ...inputStyle, marginBottom: 0, width: 70 }} />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, flex: 1 }}>
+          {FEED_EMOJI_FORSLAG.map(em => (
+            <button key={em} onClick={() => setEmoji(em)} style={{ fontSize: 17, width: 32, height: 32,
+              borderRadius: 8, cursor: "pointer", background: emoji === em ? T.fritidDim : T.bgSheet,
+              border: `1px solid ${emoji === em ? T.fritid : "transparent"}` }}>{em}</button>
+          ))}
+        </div>
+      </div>
+
+      <label style={labelStyle}>Farge</label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        {FEED_FARGE_FORSLAG.map(f => (
+          <button key={f.val} onClick={() => setFarge(f.val)} title={f.navn} style={{
+            width: 30, height: 30, borderRadius: "50%", background: f.val, cursor: "pointer",
+            border: farge === f.val ? "3px solid #fff" : "2px solid transparent" }} />
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={onCancel} style={{ flex: 1, padding: "11px", borderRadius: 10, border: `1px solid ${T.border}`,
+          background: "none", color: T.textMuted, fontSize: 14, cursor: "pointer" }}>Avbryt</button>
+        <button onClick={lagre} style={{ ...primaryBtnStyle, flex: 2, marginTop: 0 }}>Lagre</button>
+      </div>
+    </div>
+  );
+}
+
+function SettingsPanel({ settings, onChange, onClose, onFetchFeeds, feedStatus }) {
   const toggles = settings.toggles || {};
+  const [feeds, setFeeds] = useState(() => lsGet("kalender:feeds", []));
+  const [redigerFeed, setRedigerFeed] = useState(null); // feed-objekt eller {} for ny
+  const [proxyInput, setProxyInput] = useState(settings.proxyUrl || "");
+
   function setToggle(key, val) {
     onChange({ ...settings, toggles: { ...toggles, [key]: val } });
   }
+  function lagreProxy() {
+    onChange({ ...settings, proxyUrl: proxyInput.trim() });
+  }
+  function lagreFeed(feed) {
+    const liste = lsGet("kalender:feeds", []);
+    const idx = liste.findIndex(x => x.id === feed.id);
+    if (idx >= 0) liste[idx] = feed; else liste.push(feed);
+    lsSet("kalender:feeds", liste);
+    setFeeds(liste);
+    setRedigerFeed(null);
+  }
+  function slettFeed(id) {
+    const liste = lsGet("kalender:feeds", []).filter(x => x.id !== id);
+    lsSet("kalender:feeds", liste);
+    setFeeds(liste);
+  }
+
   const grupper = [
     { navn: "Arbeid", farge: T.arbeid, keys: KATEGORIER.filter(k => k.gruppe === "arbeid") },
     { navn: "Fritid", farge: T.fritid, keys: KATEGORIER.filter(k => k.gruppe === "fritid") },
@@ -935,6 +1204,59 @@ function SettingsPanel({ settings, onChange, onClose }) {
           ))}
         </div>
 
+        {/* ── Importerte kalendere ── */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ ...sectionLabelStyle, marginBottom: 0 }}>Importerte kalendere</div>
+          {feeds.length > 0 && (
+            <button onClick={() => onFetchFeeds(true)} disabled={feedStatus === "henter"}
+              style={{ background: "none", border: "none", color: feedStatus === "henter" ? T.textFaint : T.arbeid,
+                fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              {feedStatus === "henter" ? "Henter…" : "↻ Oppdater nå"}
+            </button>
+          )}
+        </div>
+
+        {/* Proxy-URL */}
+        <div style={{ background: T.bgCard2, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+          <label style={labelStyle}>Apps Script proxy-URL (settes opp én gang)</label>
+          <input value={proxyInput} onChange={e => setProxyInput(e.target.value)} onBlur={lagreProxy}
+            placeholder="https://script.google.com/…/exec" style={{ ...inputStyle, fontSize: 12, marginBottom: 6 }} />
+          <div style={{ fontSize: 11, color: T.textFaint }}>
+            {settings.proxyUrl ? "✓ Lagret" : "Lim inn nettapp-URL-en fra Apps Script"}
+          </div>
+        </div>
+
+        {/* Liste over feeds */}
+        {feeds.map(feed => (
+          redigerFeed && redigerFeed.id === feed.id ? (
+            <FeedEditor key={feed.id} feed={feed} onSave={lagreFeed} onCancel={() => setRedigerFeed(null)} />
+          ) : (
+            <div key={feed.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
+              background: T.bgCard2, borderRadius: 10, marginBottom: 6, borderLeft: `3px solid ${feed.farge}` }}>
+              <span style={{ fontSize: 18 }}>{feed.emoji}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{feed.navn}</div>
+                <div style={{ fontSize: 11, color: feed.sisteFeil ? T.red : T.textFaint }}>
+                  {feed.sisteFeil ? "⚠ " + feed.sisteFeil
+                   : feed.sisteHenting ? "Oppdatert " + new Date(feed.sisteHenting).toLocaleString("no-NO", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+                   : "Ikke hentet ennå"}
+                </div>
+              </div>
+              <button onClick={() => setRedigerFeed(feed)} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 15 }}>✏️</button>
+              <button onClick={() => slettFeed(feed.id)} style={{ background: "none", border: "none", color: T.red, cursor: "pointer", fontSize: 15 }}>🗑️</button>
+            </div>
+          )
+        ))}
+
+        {redigerFeed && !redigerFeed.id && (
+          <FeedEditor onSave={lagreFeed} onCancel={() => setRedigerFeed(null)} />
+        )}
+        {!redigerFeed && (
+          <button onClick={() => setRedigerFeed({})} style={{ width: "100%", padding: "11px", borderRadius: 10,
+            border: `1px dashed ${T.border}`, background: "none", color: T.textMuted, fontSize: 14, cursor: "pointer",
+            marginBottom: 18, marginTop: 2 }}>+ Legg til kalender</button>
+        )}
+
         <div style={sectionLabelStyle}>Kategorier</div>
         {grupper.map(g => (
           <div key={g.navn} style={{ marginBottom: 14 }}>
@@ -957,6 +1279,29 @@ function SettingsPanel({ settings, onChange, onClose }) {
             })}
           </div>
         ))}
+
+        {/* Feed-toggles */}
+        {feeds.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.fritid, marginBottom: 6 }}>Importerte kalendere</div>
+            {feeds.map(feed => {
+              const on = toggles["feed:" + feed.id] !== false;
+              return (
+                <div key={feed.id} onClick={() => setToggle("feed:" + feed.id, !on)} style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "9px 12px",
+                  background: T.bgCard2, borderRadius: 10, marginBottom: 5, cursor: "pointer" }}>
+                  <span style={{ fontSize: 17 }}>{feed.emoji}</span>
+                  <span style={{ flex: 1, fontSize: 14, color: on ? T.text : T.textFaint }}>{feed.navn}</span>
+                  <div style={{ width: 40, height: 24, borderRadius: 12, background: on ? feed.farge : T.border,
+                    position: "relative", transition: "background 0.15s" }}>
+                    <div style={{ position: "absolute", top: 2, left: on ? 18 : 2, width: 20, height: 20,
+                      borderRadius: "50%", background: "#fff", transition: "left 0.15s" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div style={{ textAlign: "center", fontSize: 11, color: T.textFaint, marginTop: 16 }}>
           Kalender v{VERSION}<br/>Leser data fra LifeHub
@@ -983,8 +1328,47 @@ function App() {
   const [egenEditor, setEgenEditor] = useState(null); // { entry?, defaultDato, occDato? }
   const [slettDialog, setSlettDialog] = useState(null); // { raw, occDato }
   const [tick, setTick] = useState(0); // force refresh etter lagring
+  const [feedStatus, setFeedStatus] = useState(""); // "henter" | "" | feilmelding
 
   function saveSettings(s) { setSettings(s); lsSet("kalender:settings", s); }
+
+  // Hent alle feeds via Apps Script-proxy. minAlder=ms: hopp over feeds hentet nylig.
+  async function hentFeeds(force) {
+    const s = lsGet("kalender:settings", {});
+    const proxy = s.proxyUrl;
+    const feeds = lsGet("kalender:feeds", []);
+    if (!proxy || feeds.length === 0) return;
+    const naa = Date.now();
+    const seksTimer = 6 * 3600 * 1000;
+    setFeedStatus("henter");
+    let endret = false;
+    for (const feed of feeds) {
+      if (!feed.url) continue;
+      if (!force && feed.sisteHenting && (naa - feed.sisteHenting) < seksTimer) continue;
+      try {
+        const url = proxy + (proxy.includes("?") ? "&" : "?") + "url=" + encodeURIComponent(feed.url);
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (data.ok && data.ics) {
+          feed.cache = data.ics;
+          feed.sisteHenting = naa;
+          feed.sisteFeil = null;
+          endret = true;
+        } else {
+          feed.sisteFeil = data.error || "Ukjent feil";
+          endret = true;
+        }
+      } catch (err) {
+        feed.sisteFeil = "Nettverksfeil";
+        endret = true;
+      }
+    }
+    if (endret) { lsSet("kalender:feeds", feeds); setTick(t => t + 1); }
+    setFeedStatus("");
+  }
+
+  // Hent ved oppstart (cachet vises umiddelbart, nytt hentes i bakgrunnen)
+  useEffect(() => { hentFeeds(false); }, []);
 
   // Beregn dato-vindu for aktiv visning (litt margin for å dekke synlige celler)
   const [from, to] = useMemo(() => {
@@ -1126,7 +1510,8 @@ function App() {
         </div>
       )}
       {showSettings && (
-        <SettingsPanel settings={settings} onChange={saveSettings} onClose={() => setShowSettings(false)} />
+        <SettingsPanel settings={settings} onChange={saveSettings} onClose={() => setShowSettings(false)}
+          onFetchFeeds={hentFeeds} feedStatus={feedStatus} />
       )}
       {showPin && (
         <PinModal onSuccess={() => { setUnlocked(true); setShowPin(false); }} onCancel={() => setShowPin(false)} />
