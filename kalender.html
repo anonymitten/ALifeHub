@@ -33,11 +33,11 @@ const { useState, useEffect, useRef, useMemo } = React;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Kalender — egen app som leser LifeHub sine localStorage-nøkler (samme origin)
-//  Versjon: 2026.07.28-02
+//  Versjon: 2026.07.28-05
 //  Nye nøkler den eier selv: kalender:hendelser, kalender:settings
 // ═══════════════════════════════════════════════════════════════════════════
 
-const VERSION = "2026.07.28-02";
+const VERSION = "2026.07.28-05";
 
 // ── Tema (mørkt, blå=Arbeid, oransje=Fritid) ────────────────────────────────
 const T = {
@@ -158,6 +158,48 @@ function fargeForGruppe(gruppe) {
   if (gruppe === "fritid") return T.fritid;
   if (gruppe === "privat") return T.privat;
   return T.textMuted;
+}
+
+// Ekspander en (muligens gjentakende) egen-oppføring til forekomster innen [from,to]
+// e: { dato, gjentak?:"ingen"|"ukentlig"|"manedlig"|"arlig", slutt?:{type:"aldri"|"dato"|"antall", dato?, antall?}, unntak?:[ymd] }
+function expandRecurring(e, from, to) {
+  const gjentak = e.gjentak || "ingen";
+  const unntak = e.unntak || [];
+  const fromY = ymd(from), toY = ymd(to);
+  const base = parseYmd(e.dato);
+  if (isNaN(base)) return [];
+
+  if (gjentak === "ingen") {
+    if (e.dato >= fromY && e.dato <= toY && !unntak.includes(e.dato))
+      return [{ dato: e.dato, sted: e.sted }];
+    return [];
+  }
+
+  const out = [];
+  const slutt = e.slutt || { type: "aldri" };
+  let sluttDato = null;
+  if (slutt.type === "dato" && slutt.dato) sluttDato = slutt.dato;
+  const maxAntall = slutt.type === "antall" ? (parseInt(slutt.antall) || 1) : null;
+
+  let cur = new Date(base);
+  let count = 0;
+  let guard = 0;
+  while (guard++ < 2000) {
+    const curY = ymd(cur);
+    if (sluttDato && curY > sluttDato) break;
+    if (maxAntall !== null && count >= maxAntall) break;
+    if (curY > toY) break;
+    count++;
+    if (curY >= fromY && curY <= toY && !unntak.includes(curY)) {
+      out.push({ dato: curY, sted: e.sted });
+    }
+    // neste forekomst
+    if (gjentak === "ukentlig") cur.setDate(cur.getDate() + 7);
+    else if (gjentak === "manedlig") cur.setMonth(cur.getMonth() + 1);
+    else if (gjentak === "arlig") cur.setFullYear(cur.getFullYear() + 1);
+    else break;
+  }
+  return out;
 }
 
 // Bygg alle hendelser innen et dato-vindu [from, to] (Date-objekter, inklusiv)
@@ -350,14 +392,19 @@ function buildEvents(from, to, settings) {
     });
   }
 
-  // ── Egne kalender-oppføringer ──
+  // ── Egne kalender-oppføringer (med evt. gjentakelse) ──
   if (on("egen")) {
     const egne = lsGet("kalender:hendelser", []);
     egne.forEach(e => {
-      push({ id: `egen-${e.id}`, dato: e.dato, kat: "egen", ikon: e.ikon || "📌",
-             tittel: e.tittel, tid: e.tid || null, allDay: !e.tid,
-             type: e.type || "plan", privat: !!e.privat,
-             farge: e.privat ? T.privat : T.fritid, kilde: "kalender:hendelser", egen: true, raw: e });
+      const forekomster = expandRecurring(e, from, to);
+      forekomster.forEach(occ => {
+        push({ id: `egen-${e.id}-${occ.dato}`, dato: occ.dato, kat: "egen",
+               ikon: e.ikon || "📌", tittel: e.tittel,
+               tid: e.tid || null, allDay: !e.tid, type: e.type || "plan",
+               privat: !!e.privat, farge: e.privat ? T.privat : T.fritid,
+               kilde: "kalender:hendelser", egen: true, raw: e,
+               occDato: occ.dato, erGjentakelse: (e.gjentak && e.gjentak !== "ingen") });
+      });
     });
   }
 
@@ -483,6 +530,9 @@ function MonthView({ cursor, events, unlocked, onSelectDay }) {
   for (let i = 0; i < startOffset; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
   while (cells.length % 7 !== 0) cells.push(null);
+  const antallUker = cells.length / 7;
+  // Cellehøyde: fyll ca 75% av skjermhøyde, fordelt på antall uker (minus plass til ukedag-header)
+  const celleHoyde = `calc((75vh - 30px) / ${antallUker})`;
 
   return (
     <div style={{ padding: "0 8px 24px" }}>
@@ -502,7 +552,7 @@ function MonthView({ cursor, events, unlocked, onSelectDay }) {
           const loggEvs = evs.filter(e => e.type === "logg");
           return (
             <button key={i} onClick={() => onSelectDay(date)} style={{
-              aspectRatio: "1", background: isToday ? T.arbeidDim : T.bgCard,
+              minHeight: celleHoyde, background: isToday ? T.arbeidDim : T.bgCard,
               border: `1px solid ${isToday ? T.arbeid : T.borderSoft}`,
               borderRadius: 10, padding: "4px 3px", cursor: "pointer",
               display: "flex", flexDirection: "column", alignItems: "stretch",
@@ -514,16 +564,16 @@ function MonthView({ cursor, events, unlocked, onSelectDay }) {
               {isPast && loggEvs.length > 0 ? (
                 <>
                   <div style={iconRowStyle(true)}>
-                    {planEvs.slice(0,4).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={13} />)}
+                    {planEvs.slice(0,6).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={14} />)}
                   </div>
                   <div style={{ height: 1, background: T.border, margin: "1px 0" }} />
                   <div style={iconRowStyle(false)}>
-                    {loggEvs.slice(0,4).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={13} />)}
+                    {loggEvs.slice(0,6).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={14} />)}
                   </div>
                 </>
               ) : (
                 <div style={iconRowStyle(true)}>
-                  {evs.slice(0,6).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={13} />)}
+                  {evs.slice(0,9).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={14} />)}
                 </div>
               )}
             </button>
@@ -634,7 +684,7 @@ function DayView({ date, events, unlocked, settings, onClose, onAddEgen, onEditE
                 return (
                   <div key={i} onClick={() => {
                         if (skjul) { onRequestPin(); return; }
-                        if (e.egen) onEditEgen(e.raw);
+                        if (e.egen) onEditEgen(e.raw, e.occDato);
                       }}
                       style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
                         background: T.bgCard2, borderRadius: 10, marginBottom: 6,
@@ -645,7 +695,11 @@ function DayView({ date, events, unlocked, settings, onClose, onAddEgen, onEditE
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {skjul ? "Privat oppføring" : e.tittel}
                       </div>
-                      {e.tid && !skjul && <div style={{ fontSize: 12, color: T.textFaint }}>{e.tid}</div>}
+                      {!skjul && (e.tid || (e.raw && e.raw.sted)) && (
+                        <div style={{ fontSize: 12, color: T.textFaint }}>
+                          {e.tid || ""}{e.tid && e.raw && e.raw.sted ? " · " : ""}{e.raw && e.raw.sted ? "📍 " + e.raw.sted : ""}
+                        </div>
+                      )}
                     </div>
                     {e.egen && !skjul && <span style={{ fontSize: 12, color: T.textFaint }}>›</span>}
                   </div>
@@ -671,29 +725,62 @@ function DayView({ date, events, unlocked, settings, onClose, onAddEgen, onEditE
 }
 
 // ── Editor for egne oppføringer ─────────────────────────────────────────────
-const EMOJI_VALG = ["📌","⭐","🎬","📺","🎮","🎂","💰","🏋️","🧹","📓","🩺","🎵","✈️","🍽️","☕","🎉","💊","📞","🚗","🏥","🛒","💼","❤️","🔥","🌟","📅"];
+const EMOJI_DEFAULT = ["📌","⭐","🎬","📺","🎮","🎂","💰","🏋️","🧹","📓","🩺","🎵","✈️","🍽️","☕","🎉","💊","📞","🚗","🏥","🛒","💼","❤️","🔥","🌟","📅"];
 
-function EgenEditor({ entry, defaultDato, onSave, onDelete, onClose }) {
+function EgenEditor({ entry, defaultDato, onSave, onDelete, settings, onChangeSettings, onClose }) {
   const [tittel, setTittel] = useState(entry ? entry.tittel : "");
   const [dato, setDato] = useState(entry ? entry.dato : defaultDato);
+  const [sted, setSted] = useState(entry ? entry.sted || "" : "");
   const [harTid, setHarTid] = useState(entry ? !!entry.tid : false);
   const [tid, setTid] = useState(entry && entry.tid ? entry.tid : "12:00");
   const [ikon, setIkon] = useState(entry ? entry.ikon || "📌" : "📌");
   const [privat, setPrivat] = useState(entry ? !!entry.privat : false);
   const [notat, setNotat] = useState(entry ? entry.notat || "" : "");
+  const [gjentak, setGjentak] = useState(entry ? entry.gjentak || "ingen" : "ingen");
+  const [sluttType, setSluttType] = useState(entry && entry.slutt ? entry.slutt.type : "aldri");
+  const [sluttDato, setSluttDato] = useState(entry && entry.slutt && entry.slutt.dato ? entry.slutt.dato : defaultDato);
+  const [sluttAntall, setSluttAntall] = useState(entry && entry.slutt && entry.slutt.antall ? entry.slutt.antall : 10);
+  const [redigerEmoji, setRedigerEmoji] = useState(false);
+
+  const favEmoji = (settings.favorittEmojier && settings.favorittEmojier.length) ? settings.favorittEmojier : EMOJI_DEFAULT;
+
+  function velgEmoji(em) {
+    if (!em) return;
+    setIkon(em);
+    // Hvis emojien ikke er i hurtigvalg, legg den til automatisk øverst
+    if (!favEmoji.includes(em)) {
+      const ny = [em, ...favEmoji].slice(0, 40);
+      onChangeSettings({ ...settings, favorittEmojier: ny });
+    }
+  }
+  function toggleFav(em) {
+    const har = favEmoji.includes(em);
+    const ny = har ? favEmoji.filter(x => x !== em) : [...favEmoji, em];
+    onChangeSettings({ ...settings, favorittEmojier: ny.length ? ny : EMOJI_DEFAULT });
+  }
 
   function lagre() {
     if (!tittel.trim()) return;
-    onSave({
+    const obj = {
       id: entry ? entry.id : "k" + Date.now(),
-      tittel: tittel.trim(), dato, tid: harTid ? tid : null,
+      tittel: tittel.trim(), dato, sted: sted.trim(), tid: harTid ? tid : null,
       ikon, privat, notat: notat.trim(), type: "plan",
-    });
+      gjentak,
+      unntak: entry ? entry.unntak || [] : [],
+    };
+    if (gjentak !== "ingen") {
+      obj.slutt = sluttType === "dato" ? { type: "dato", dato: sluttDato }
+                : sluttType === "antall" ? { type: "antall", antall: parseInt(sluttAntall) || 1 }
+                : { type: "aldri" };
+    }
+    onSave(obj);
   }
+
+  const gjentakValg = [["ingen","Aldri"],["ukentlig","Ukentlig"],["manedlig","Månedlig"],["arlig","Årlig"]];
 
   return (
     <div style={overlayStyle}>
-      <div className="kal-sheet" style={{ ...sheetStyle, maxWidth: 440, maxHeight: "88vh", overflowY: "auto" }}>
+      <div className="kal-sheet" style={{ ...sheetStyle, maxWidth: 440, maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div style={{ fontSize: 18, fontWeight: 800 }}>{entry ? "Rediger oppføring" : "Ny oppføring"}</div>
           <button onClick={onClose} style={closeBtnStyle}>✕</button>
@@ -702,24 +789,89 @@ function EgenEditor({ entry, defaultDato, onSave, onDelete, onClose }) {
         <label style={labelStyle}>Tittel</label>
         <input value={tittel} onChange={e => setTittel(e.target.value)} placeholder="Hva skjer?" style={inputStyle} autoFocus />
 
-        <label style={labelStyle}>Ikon</label>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <label style={{ ...labelStyle, marginBottom: 0 }}>Ikon</label>
+          <button onClick={() => setRedigerEmoji(!redigerEmoji)} style={{ background: "none", border: "none",
+            color: redigerEmoji ? T.fritid : T.textFaint, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
+            {redigerEmoji ? "Ferdig" : "Rediger hurtigvalg"}
+          </button>
+        </div>
+        {/* Valgt ikon + native emoji-felt */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <div style={{ fontSize: 26, width: 46, height: 46, borderRadius: 10, background: T.fritidDim,
+            border: `2px solid ${T.fritid}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{ikon}</div>
+          <input value={ikon} onChange={e => {
+              const v = [...e.target.value].slice(-1)[0] || ""; // ta siste tegn (emoji)
+              if (v) velgEmoji(v);
+            }} placeholder="Skriv/lim inn hvilken som helst emoji…"
+            style={{ ...inputStyle, marginBottom: 0, flex: 1, fontSize: 15 }} />
+        </div>
+        {redigerEmoji && (
+          <div style={{ fontSize: 11, color: T.textFaint, marginBottom: 8 }}>
+            Trykk for å fjerne fra hurtigvalg. Emojier du velger over, legges til automatisk.
+          </div>
+        )}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-          {EMOJI_VALG.map(em => (
-            <button key={em} onClick={() => setIkon(em)} style={{
-              fontSize: 20, width: 40, height: 40, borderRadius: 10, cursor: "pointer",
-              background: ikon === em ? T.fritidDim : T.bgCard2,
-              border: `2px solid ${ikon === em ? T.fritid : "transparent"}` }}>{em}</button>
+          {favEmoji.map(em => (
+            <button key={em} onClick={() => redigerEmoji ? toggleFav(em) : velgEmoji(em)} style={{
+              fontSize: 20, width: 40, height: 40, borderRadius: 10, cursor: "pointer", position: "relative",
+              background: ikon === em && !redigerEmoji ? T.fritidDim : T.bgCard2,
+              border: `2px solid ${ikon === em && !redigerEmoji ? T.fritid : "transparent"}`,
+              opacity: redigerEmoji ? 0.85 : 1 }}>
+              {em}
+              {redigerEmoji && <span style={{ position: "absolute", top: -4, right: -4, background: T.red,
+                color: "#fff", borderRadius: "50%", width: 16, height: 16, fontSize: 11, lineHeight: "16px" }}>×</span>}
+            </button>
           ))}
         </div>
+
+        <label style={labelStyle}>Sted (valgfritt)</label>
+        <input value={sted} onChange={e => setSted(e.target.value)} placeholder="Hvor foregår det?" style={inputStyle} />
 
         <label style={labelStyle}>Dato</label>
         <input type="date" value={dato} onChange={e => setDato(e.target.value)} style={inputStyle} />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, marginTop: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, marginTop: 4 }}>
           <input type="checkbox" id="harTid" checked={harTid} onChange={e => setHarTid(e.target.checked)} style={{ width: 18, height: 18 }} />
           <label htmlFor="harTid" style={{ fontSize: 14, color: T.text }}>Bestemt tidspunkt</label>
           {harTid && <input type="time" value={tid} onChange={e => setTid(e.target.value)} style={{ ...inputStyle, marginBottom: 0, width: "auto", flex: 1 }} />}
         </div>
+
+        {/* Gjentakelse */}
+        <label style={labelStyle}>Gjenta</label>
+        <div style={{ display: "flex", gap: 6, marginBottom: gjentak !== "ingen" ? 10 : 14 }}>
+          {gjentakValg.map(([v,l]) => (
+            <button key={v} onClick={() => setGjentak(v)} style={{
+              flex: 1, padding: "9px 4px", borderRadius: 9, cursor: "pointer", fontSize: 12, fontWeight: 600,
+              background: gjentak === v ? T.fritidDim : T.bgCard2,
+              border: `1px solid ${gjentak === v ? T.fritid : "transparent"}`,
+              color: gjentak === v ? T.fritid : T.textMuted }}>{l}</button>
+          ))}
+        </div>
+        {gjentak !== "ingen" && (
+          <div style={{ background: T.bgCard2, borderRadius: 10, padding: "12px", marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: T.textMuted, fontWeight: 600, marginBottom: 8 }}>Slutter</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: sluttType !== "aldri" ? 10 : 0 }}>
+              {[["aldri","Aldri"],["dato","På dato"],["antall","Etter antall"]].map(([v,l]) => (
+                <button key={v} onClick={() => setSluttType(v)} style={{
+                  flex: 1, padding: "8px 4px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600,
+                  background: sluttType === v ? T.arbeidDim : T.bgSheet,
+                  border: `1px solid ${sluttType === v ? T.arbeid : "transparent"}`,
+                  color: sluttType === v ? T.arbeid : T.textMuted }}>{l}</button>
+              ))}
+            </div>
+            {sluttType === "dato" && (
+              <input type="date" value={sluttDato} onChange={e => setSluttDato(e.target.value)} style={{ ...inputStyle, marginBottom: 0 }} />
+            )}
+            {sluttType === "antall" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input type="number" min="1" value={sluttAntall} onChange={e => setSluttAntall(e.target.value)}
+                  style={{ ...inputStyle, marginBottom: 0, width: 80 }} />
+                <span style={{ fontSize: 13, color: T.textMuted }}>ganger</span>
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "10px 12px",
           background: privat ? T.privatDim : T.bgCard2, borderRadius: 10,
@@ -732,7 +884,7 @@ function EgenEditor({ entry, defaultDato, onSave, onDelete, onClose }) {
         <textarea value={notat} onChange={e => setNotat(e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
 
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          {entry && <button onClick={() => onDelete(entry.id)} style={{ background: "none", border: `1px solid ${T.red}`, color: T.red, borderRadius: 10, padding: "10px 16px", cursor: "pointer", fontSize: 14 }}>🗑️</button>}
+          {entry && <button onClick={() => onDelete(entry)} style={{ background: "none", border: `1px solid ${T.red}`, color: T.red, borderRadius: 10, padding: "10px 16px", cursor: "pointer", fontSize: 14 }}>🗑️</button>}
           <button onClick={lagre} style={{ ...primaryBtnStyle, flex: 1, marginTop: 0 }}>Lagre</button>
         </div>
       </div>
@@ -828,7 +980,8 @@ function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [egenEditor, setEgenEditor] = useState(null); // { entry?, defaultDato }
+  const [egenEditor, setEgenEditor] = useState(null); // { entry?, defaultDato, occDato? }
+  const [slettDialog, setSlettDialog] = useState(null); // { raw, occDato }
   const [tick, setTick] = useState(0); // force refresh etter lagring
 
   function saveSettings(s) { setSettings(s); lsSet("kalender:settings", s); }
@@ -863,16 +1016,39 @@ function App() {
   function saveEgen(entry) {
     const list = lsGet("kalender:hendelser", []);
     const idx = list.findIndex(x => x.id === entry.id);
-    if (idx >= 0) list[idx] = entry; else list.push(entry);
+    if (idx >= 0) {
+      // behold eksisterende unntak
+      entry.unntak = list[idx].unntak || entry.unntak || [];
+      list[idx] = entry;
+    } else list.push(entry);
     lsSet("kalender:hendelser", list);
     setEgenEditor(null);
     setTick(t => t + 1);
   }
-  function deleteEgen(id) {
+  // onDelete fra editor: mottar hele raw-objektet. Bestem om vi trenger valg.
+  function requestDeleteEgen(raw) {
+    const gjentakende = raw.gjentak && raw.gjentak !== "ingen";
+    if (gjentakende) {
+      setSlettDialog({ raw, occDato: (egenEditor && egenEditor.occDato) || raw.dato });
+    } else {
+      doDeleteEgen(raw.id);
+    }
+  }
+  function doDeleteEgen(id) {
     const list = lsGet("kalender:hendelser", []).filter(x => x.id !== id);
     lsSet("kalender:hendelser", list);
-    setEgenEditor(null);
-    setTick(t => t + 1);
+    setEgenEditor(null); setSlettDialog(null); setTick(t => t + 1);
+  }
+  function deleteForekomst(id, occDato) {
+    const list = lsGet("kalender:hendelser", []);
+    const idx = list.findIndex(x => x.id === id);
+    if (idx >= 0) {
+      const unntak = list[idx].unntak || [];
+      if (!unntak.includes(occDato)) unntak.push(occDato);
+      list[idx] = { ...list[idx], unntak };
+      lsSet("kalender:hendelser", list);
+    }
+    setEgenEditor(null); setSlettDialog(null); setTick(t => t + 1);
   }
 
   const tittel = view === "uke"
@@ -919,12 +1095,35 @@ function App() {
         <DayView date={selectedDay} events={dayEvents} unlocked={unlocked} settings={settings}
           onClose={() => setSelectedDay(null)}
           onAddEgen={(dato) => setEgenEditor({ defaultDato: dato })}
-          onEditEgen={(raw) => setEgenEditor({ entry: raw, defaultDato: raw.dato })}
+          onEditEgen={(raw, occDato) => setEgenEditor({ entry: raw, defaultDato: raw.dato, occDato })}
           onRequestPin={() => setShowPin(true)} />
       )}
       {egenEditor && (
         <EgenEditor entry={egenEditor.entry} defaultDato={egenEditor.defaultDato || todayYmd()}
-          onSave={saveEgen} onDelete={deleteEgen} onClose={() => setEgenEditor(null)} />
+          settings={settings} onChangeSettings={saveSettings}
+          onSave={saveEgen} onDelete={requestDeleteEgen} onClose={() => setEgenEditor(null)} />
+      )}
+      {slettDialog && (
+        <div style={overlayStyle} onClick={() => setSlettDialog(null)}>
+          <div className="kal-sheet" style={{ ...sheetStyle, maxWidth: 380 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 6 }}>Slett gjentakende oppføring</div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 18 }}>
+              «{slettDialog.raw.tittel}» gjentar seg. Hva vil du slette?
+            </div>
+            <button onClick={() => deleteForekomst(slettDialog.raw.id, slettDialog.occDato)}
+              style={{ ...primaryBtnStyle, marginTop: 0, marginBottom: 10, background: T.fritid }}>
+              Kun denne dagen ({slettDialog.occDato})
+            </button>
+            <button onClick={() => doDeleteEgen(slettDialog.raw.id)}
+              style={{ width: "100%", padding: "13px", borderRadius: 12, border: `1px solid ${T.red}`,
+                background: "none", color: T.red, fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>
+              Hele serien
+            </button>
+            <button onClick={() => setSlettDialog(null)}
+              style={{ width: "100%", padding: "11px", borderRadius: 12, border: "none",
+                background: "none", color: T.textMuted, fontSize: 14, cursor: "pointer" }}>Avbryt</button>
+          </div>
+        </div>
       )}
       {showSettings && (
         <SettingsPanel settings={settings} onChange={saveSettings} onClose={() => setShowSettings(false)} />
