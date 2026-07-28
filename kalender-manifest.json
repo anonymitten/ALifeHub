@@ -1,0 +1,29 @@
+{
+  "name": "Kalender",
+  "short_name": "Kalender",
+  "start_url": "/ALifeHub/kalender.html",
+  "scope": "/ALifeHub/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1a1e",
+  "theme_color": "#1a1a1e",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "I dag",
+      "short_name": "I dag",
+      "url": "/ALifeHub/kalender.html?view=dag",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Denne uka",
+      "short_name": "Uke",
+      "url": "/ALifeHub/kalender.html?view=uke",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

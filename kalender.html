@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <meta name="theme-color" content="#1a1a1e"/>
+  <title>Kalender</title>
+  <link rel="manifest" href="kalender-manifest.json"/>
+  <link rel="icon" href="icon-192.png"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; background: #1a1a1e; color: #ececf0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overscroll-behavior: none; }
+    #root { min-height: 100vh; }
+    button { font-family: inherit; }
+    input, select, textarea { font-family: inherit; }
+    ::-webkit-scrollbar { width: 0; height: 0; }
+    @keyframes kal-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes kal-sheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .kal-fade { animation: kal-fade 0.18s ease-out; }
+    .kal-sheet { animation: kal-sheet 0.22s cubic-bezier(0.2,0.8,0.2,1); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo } = React;
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Kalender — egen app som leser LifeHub sine localStorage-nøkler (samme origin)
+//  Versjon: 2026.07.28-01
+//  Nye nøkler den eier selv: kalender:hendelser, kalender:settings
+// ═══════════════════════════════════════════════════════════════════════════
+
+const VERSION = "2026.07.28-01";
+
+// ── Tema (mørkt, blå=Arbeid, oransje=Fritid) ────────────────────────────────
+const T = {
+  bg: "#1a1a1e",
+  bgCard: "#242428",
+  bgCard2: "#2b2b30",
+  bgSheet: "#1e1e22",
+  border: "#34343a",
+  borderSoft: "#2c2c32",
+  text: "#ececf0",
+  textMuted: "#a8a8b0",
+  textFaint: "#6e6e78",
+  // Aksenter
+  arbeid: "#4a9eff",       // blå = Arbeid
+  arbeidDim: "#16283d",
+  arbeidBorder: "#2a4a6d",
+  fritid: "#ff9a3c",       // oransje = Fritid
+  fritidDim: "#3a2410",
+  fritidBorder: "#6d4a2a",
+  green: "#2ec26a",
+  greenDim: "#15351f",
+  privat: "#b57edc",       // lilla = privat/hemmelig
+  privatDim: "#2a1a35",
+  red: "#ef4444",
+  today: "#2ec26a",
+};
+
+// ── PIN-hash (identisk med LifeHub for kompatibilitet) ──────────────────────
+async function hashPin(pin) {
+  const enc = new TextEncoder().encode("lifehub:" + pin);
+  const buf = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+// ── localStorage-hjelpere ───────────────────────────────────────────────────
+function lsGet(key, fallback) {
+  try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fallback; }
+  catch (_) { return fallback; }
+}
+function lsSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch (_) {}
+}
+
+// ── Dato-hjelpere ───────────────────────────────────────────────────────────
+const pad = n => String(n).padStart(2, "0");
+function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function parseYmd(s) { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); }
+function todayYmd() { return ymd(new Date()); }
+function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function sameYmd(a, b) { return ymd(a) === ymd(b); }
+const MND = ["januar","februar","mars","april","mai","juni","juli","august","september","oktober","november","desember"];
+const UKEDAG = ["søn","man","tir","ons","tor","fre","lør"];
+const UKEDAG_LANG = ["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"];
+
+// ISO-uke (mandag = start)
+function isoWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const week = 1 + Math.round(((d - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+  return { year: d.getUTCFullYear(), week };
+}
+function isoWeekKey(date) { const { year, week } = isoWeek(date); return `${year}-W${pad(week)}`; }
+
+// Mandag i uken som inneholder d
+function mondayOf(d) {
+  const x = startOfDay(d);
+  const dow = (x.getDay() + 6) % 7; // man=0
+  return addDays(x, -dow);
+}
+
+// Neste lønningsdag-logikk (identisk med LifeHub: 12., justert bakover for helg)
+function paydayForMonth(year, month) {
+  const d = new Date(year, month, 12);
+  const w = d.getDay();
+  if (w === 6) d.setDate(11); // lør → fre
+  if (w === 0) d.setDate(10); // søn → fre
+  return d;
+}
+
+// Monthly-equivalent recurring: hvilke måneder faller en fast betaling på?
+// LifeHub lagrer freq + dueDay; for kalender viser vi forekomster fremover.
+function fasteOccursInMonth(fast, year, month) {
+  // Uten startmåned-info viser vi månedlig/ukentlig hver måned; sjeldnere frekvenser hver måned de "treffer" er ukjent,
+  // så vi viser dem hver måned de logisk kan forfalle. Enkleste trygge regel: vis alle i hver måned på dueDay.
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  AGGREGERING — leser LifeHub-nøkler og bygger hendelser
+//  Hver hendelse: { id, dato:"YYYY-MM-DD", kat, ikon, tittel, tid?, allDay,
+//                   type:"plan"|"logg", privat?, farge, kilde }
+//  kat brukes for toggling. Kategorier og default-ikon defineres i KATEGORIER.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const KATEGORIER = [
+  // key,        label,            ikon,  gruppe ("arbeid"|"fritid"|"logg"|"privat"), type
+  { key: "lonn",      label: "Lønn & betaling",   ikon: "💰", gruppe: "arbeid", type: "plan" },
+  { key: "jobb",      label: "Jobb-frister",      ikon: "📌", gruppe: "arbeid", type: "plan" },
+  { key: "hus",       label: "Husoppgaver",       ikon: "🧹", gruppe: "arbeid", type: "plan" },
+  { key: "spill",     label: "Spill-releases",    ikon: "🎮", gruppe: "fritid", type: "plan" },
+  { key: "bursdag",   label: "Bursdager",         ikon: "🎂", gruppe: "fritid", type: "plan" },
+  { key: "trening",   label: "Treningsplan",      ikon: "🏋️", gruppe: "fritid", type: "plan" },
+  { key: "treningLogg", label: "Treningslogg",    ikon: "🏋️", gruppe: "logg",   type: "logg" },
+  { key: "dagbok",    label: "Dagbok",            ikon: "📓", gruppe: "privat", type: "logg", privat: true },
+  { key: "sti",       label: "STI-test",          ikon: "🩺", gruppe: "logg",   type: "logg" },
+  { key: "sexOrg",    label: "Sexlogg (orgasme)", ikon: "💦", gruppe: "privat", type: "logg", privat: true },
+  { key: "sexBoner",  label: "Sexlogg (ereksjon)", ikon: "🍆", gruppe: "privat", type: "logg", privat: true },
+  { key: "sexlyst",   label: "Velvære/sexlyst",   ikon: "📈", gruppe: "privat", type: "logg", privat: true },
+  { key: "egen",      label: "Egne oppføringer",  ikon: "📌", gruppe: "fritid", type: "begge" },
+];
+
+function katMeta(key) { return KATEGORIER.find(k => k.key === key) || {}; }
+function fargeForGruppe(gruppe) {
+  if (gruppe === "arbeid") return T.arbeid;
+  if (gruppe === "fritid") return T.fritid;
+  if (gruppe === "privat") return T.privat;
+  return T.textMuted;
+}
+
+// Bygg alle hendelser innen et dato-vindu [from, to] (Date-objekter, inklusiv)
+function buildEvents(from, to, settings) {
+  const events = [];
+  const toggles = settings.toggles || {};
+  const on = key => toggles[key] !== false; // default på
+  const fromY = ymd(from), toY = ymd(to);
+  const inRange = y => y >= fromY && y <= toY;
+  const push = e => { if (inRange(e.dato)) events.push(e); };
+
+  // ── Lønn (12. hver mnd, justert for helg) ──
+  if (on("lonn")) {
+    let cur = new Date(from.getFullYear(), from.getMonth(), 1);
+    const end = new Date(to.getFullYear(), to.getMonth() + 1, 1);
+    while (cur < end) {
+      const pd = paydayForMonth(cur.getFullYear(), cur.getMonth());
+      push({ id: `lonn-${ymd(pd)}`, dato: ymd(pd), kat: "lonn", ikon: "💰",
+             tittel: "Lønn", allDay: true, type: "plan", farge: T.arbeid, kilde: "okonomi" });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    // Faste betalinger (dueDay, hver måned)
+    const faste = lsGet("okonomi:faste", []);
+    let c2 = new Date(from.getFullYear(), from.getMonth(), 1);
+    while (c2 < end) {
+      faste.forEach(f => {
+        if (!f.dueDay) return;
+        const day = Math.min(parseInt(f.dueDay), new Date(c2.getFullYear(), c2.getMonth()+1, 0).getDate());
+        const d = new Date(c2.getFullYear(), c2.getMonth(), day);
+        push({ id: `fast-${f.id||f.name}-${ymd(d)}`, dato: ymd(d), kat: "lonn", ikon: "💰",
+               tittel: `${f.name}${f.amount ? " – " + f.amount + " kr" : ""}`, allDay: true,
+               type: "plan", farge: T.arbeid, kilde: "okonomi:faste" });
+      });
+      c2.setMonth(c2.getMonth() + 1);
+    }
+    // Ventende betalinger (dueDate, kun ubetalte)
+    const ventende = lsGet("okonomi:ventende", []);
+    ventende.forEach(v => {
+      if (!v.dueDate || v.paid) return;
+      push({ id: `vent-${v.id}`, dato: v.dueDate, kat: "lonn", ikon: "💰",
+             tittel: `${v.name}${v.amount ? " – " + v.amount + " kr" : ""}`, allDay: true,
+             type: "plan", farge: T.arbeid, kilde: "okonomi:ventende" });
+    });
+  }
+
+  // ── Jobb-frister ──
+  if (on("jobb")) {
+    const projects = lsGet("jobb:projects", []);
+    projects.forEach(p => (p.tasks || []).forEach(task => {
+      if (!task.deadline) return;
+      push({ id: `jobb-${task.id}`, dato: task.deadline, kat: "jobb", ikon: "📌",
+             tittel: `${task.name}${p.name ? " (" + p.name + ")" : ""}`, allDay: true,
+             type: "plan", farge: T.arbeid, kilde: "jobb:projects" });
+    }));
+  }
+
+  // ── Husoppgaver (kun NESTE forfall per oppgave) ──
+  if (on("hus")) {
+    const tasks = lsGet("husoppgaver:tasks", []);
+    const completions = lsGet("husoppgaver:completions", {});
+    tasks.forEach(task => {
+      const last = completions[task.id];
+      const interval = Number(task.intervalDays) || 7;
+      // neste forfall = last + interval dager (eller i dag hvis aldri gjort)
+      const nextTs = last ? last + interval * 86400000 : Date.now();
+      const d = startOfDay(new Date(nextTs));
+      push({ id: `hus-${task.id}`, dato: ymd(d), kat: "hus", ikon: task.icon || "🧹",
+             tittel: task.name, allDay: true, type: "plan", farge: T.arbeid, kilde: "husoppgaver" });
+    });
+  }
+
+  // ── Spill-releases ──
+  if (on("spill")) {
+    const releases = lsGet("gaming:releases", []);
+    releases.forEach(r => {
+      let dato = null;
+      if ((r.dateType || "full") === "full" && r.releaseDate) dato = r.releaseDate;
+      else if (r.dateType === "year" && r.releaseYear) dato = `${r.releaseYear}-01-01`; // år-only → 1. jan
+      if (!dato) return;
+      push({ id: `spill-${r.id||r.title}`, dato, kat: "spill", ikon: "🎮",
+             tittel: r.title + (r.dateType === "year" ? " (år)" : ""), allDay: true,
+             type: "plan", farge: T.fritid, kilde: "gaming:releases",
+             upresis: r.dateType === "year" });
+    });
+  }
+
+  // ── Bursdager (personkatalog, vis alle inntil visIKalender-feltet finnes) ──
+  if (on("bursdag")) {
+    const personer = lsGet("hemmelig:personkatalog", []);
+    personer.forEach(p => {
+      if (!p.bursdag) return;
+      if (p.visIKalender === false) return; // respekter feltet når det finnes
+      // bursdag lagret som YYYY-MM-DD (fødselsdato). Vis for hvert år i vinduet.
+      const bd = parseYmd(p.bursdag);
+      if (isNaN(bd)) return;
+      for (let yr = from.getFullYear(); yr <= to.getFullYear(); yr++) {
+        const d = new Date(yr, bd.getMonth(), bd.getDate());
+        const alder = yr - bd.getFullYear();
+        push({ id: `bd-${p.id}-${yr}`, dato: ymd(d), kat: "bursdag", ikon: "🎂",
+               tittel: `${p.navn}${alder > 0 ? " (" + alder + ")" : ""}`, allDay: true,
+               type: "plan", farge: T.fritid, kilde: "personkatalog" });
+      }
+    });
+  }
+
+  // ── Treningsplan (kun inneværende + neste uke) ──
+  if (on("trening")) {
+    const ukeplan = lsGet("trening:ukeplan", { default: {}, overrides: {} });
+    const program = lsGet("trening:program", []);
+    const progName = id => { const p = program.find(x => x.id === id); return p ? { navn: p.name, ikon: p.icon || "🏋️" } : null; };
+    const now = startOfDay(new Date());
+    const uke0 = mondayOf(now);
+    const uke1 = addDays(uke0, 7);
+    [uke0, uke1].forEach(mandag => {
+      const wk = isoWeekKey(mandag);
+      const plan = (ukeplan.overrides && ukeplan.overrides[wk]) || ukeplan.default || {};
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(mandag, i);
+        if (d < now) continue; // ikke planlagte økter i fortid
+        // LifeHub: 1=mandag ... 7=søndag (idx+1 der idx 0 = mandag). i=0 er mandag her.
+        const dowKey = i + 1;
+        const catId = plan[dowKey];
+        if (!catId) continue;
+        const pr = progName(catId);
+        if (!pr) continue;
+        push({ id: `tren-${ymd(d)}`, dato: ymd(d), kat: "trening", ikon: pr.ikon,
+               tittel: pr.navn, allDay: true, type: "plan", farge: T.fritid, kilde: "trening:ukeplan" });
+      }
+    });
+  }
+
+  // ── Treningslogg (logg, kun passert) ──
+  if (on("treningLogg")) {
+    const logg = lsGet("trening:logg", {});
+    const program = lsGet("trening:program", []);
+    Object.keys(logg).forEach(dato => {
+      const entry = logg[dato];
+      const pr = program.find(x => x.id === entry.catId);
+      push({ id: `trenlogg-${dato}`, dato, kat: "treningLogg", ikon: pr ? (pr.icon || "🏋️") : "🏋️",
+             tittel: (pr ? pr.name : "Trening") + (entry.rating ? ` ⭐${entry.rating}` : ""),
+             allDay: true, type: "logg", farge: T.fritid, kilde: "trening:logg" });
+    });
+  }
+
+  // ── Dagbok (privat logg) ──
+  if (on("dagbok")) {
+    const dagbok = lsGet("hemmelig:dagbok", []);
+    dagbok.forEach(e => {
+      if (!e.dato) return;
+      push({ id: `dagbok-${e.id}`, dato: e.dato, kat: "dagbok", ikon: "📓",
+             tittel: "Dagbok", allDay: true, type: "logg", privat: true, farge: T.privat, kilde: "dagbok" });
+    });
+  }
+
+  // ── STI-test (logg) ──
+  if (on("sti")) {
+    const tester = lsGet("hemmelig:stitester", []);
+    tester.forEach(e => {
+      if (!e.dato) return;
+      push({ id: `sti-${e.id}`, dato: e.dato, kat: "sti", ikon: "🩺",
+             tittel: "STI-test", allDay: true, type: "logg", farge: T.textMuted, kilde: "stitester" });
+    });
+  }
+
+  // ── Sexlogg (orgasme + ereksjon), privat, tidsbasert ──
+  const sexlogg = lsGet("hemmelig:orgasme:logg", []);
+  sexlogg.forEach(e => {
+    if (!e.dato) return;
+    if (e.type === "boner") {
+      if (!on("sexBoner")) return;
+      push({ id: `sexb-${e.id}`, dato: e.dato, kat: "sexBoner", ikon: "🍆",
+             tittel: "Ereksjon", tid: e.tid || null, allDay: !e.tid, type: "logg",
+             privat: true, farge: T.privat, kilde: "orgasme:logg" });
+    } else {
+      if (!on("sexOrg")) return;
+      push({ id: `sexo-${e.id}`, dato: e.dato, kat: "sexOrg", ikon: "💦",
+             tittel: "Orgasme" + (e.helhetsrating ? ` ⭐${e.helhetsrating}` : ""), tid: e.tid || null,
+             allDay: !e.tid, type: "logg", privat: true, farge: T.privat, kilde: "orgasme:logg" });
+    }
+  });
+
+  // ── Velvære/sexlyst (privat logg) ──
+  if (on("sexlyst")) {
+    const sl = lsGet("hemmelig:sexlyst", []);
+    (Array.isArray(sl) ? sl : []).forEach(e => {
+      if (!e.dato) return;
+      push({ id: `sexlyst-${e.id}`, dato: e.dato, kat: "sexlyst", ikon: "📈",
+             tittel: "Velvære" + (e.sexlyst ? ` (lyst ${e.sexlyst})` : ""), allDay: true,
+             type: "logg", privat: true, farge: T.privat, kilde: "sexlyst" });
+    });
+  }
+
+  // ── Egne kalender-oppføringer ──
+  if (on("egen")) {
+    const egne = lsGet("kalender:hendelser", []);
+    egne.forEach(e => {
+      push({ id: `egen-${e.id}`, dato: e.dato, kat: "egen", ikon: e.ikon || "📌",
+             tittel: e.tittel, tid: e.tid || null, allDay: !e.tid,
+             type: e.type || "plan", privat: !!e.privat,
+             farge: e.privat ? T.privat : T.fritid, kilde: "kalender:hendelser", egen: true, raw: e });
+    });
+  }
+
+  // ── Glad i Dag: ikke eget ikon, men hentes til dagsvisning separat ──
+
+  return events;
+}
+
+// Glad i Dag-tekst for en gitt dato (til dagsvisning)
+function gladForDate(dato) {
+  const entries = lsGet("gladidag:entries", {});
+  return entries[dato] || null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  UI-KOMPONENTER
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── PIN-modal (samme hash/lockout som LifeHub) ──────────────────────────────
+function PinModal({ onSuccess, onCancel }) {
+  const [digits, setDigits] = useState([]);
+  const [error, setError] = useState("");
+  const [locked, setLocked] = useState(false);
+
+  useEffect(() => {
+    const lu = parseInt(localStorage.getItem("hemmelig:lockUntil") || "0");
+    if (lu && Date.now() < lu) {
+      setLocked(true);
+      const mins = Math.ceil((lu - Date.now()) / 60000);
+      setError(`Låst i ${mins} min (for mange forsøk)`);
+    }
+  }, []);
+
+  async function submit(ds) {
+    const pin = ds.join("");
+    const stored = localStorage.getItem("hemmelig:pin");
+    if (!stored) { setError("Ingen PIN satt i LifeHub ennå"); setDigits([]); return; }
+    const hash = await hashPin(pin);
+    if (hash === stored) {
+      localStorage.removeItem("hemmelig:attempts");
+      localStorage.removeItem("hemmelig:lockUntil");
+      onSuccess();
+    } else {
+      const att = parseInt(localStorage.getItem("hemmelig:attempts") || "0") + 1;
+      localStorage.setItem("hemmelig:attempts", String(att));
+      if (att >= 5) {
+        const until = Date.now() + 5 * 60000;
+        localStorage.setItem("hemmelig:lockUntil", String(until));
+        setLocked(true);
+        setError("For mange forsøk. Låst i 5 min.");
+      } else {
+        setError(`Feil PIN (${att}/5)`);
+      }
+      setDigits([]);
+    }
+  }
+
+  function press(n) {
+    if (locked) return;
+    if (digits.length >= 6) return;
+    const nd = [...digits, n];
+    setDigits(nd);
+    setError("");
+    if (nd.length === 6) submit(nd);
+  }
+  function back() { setDigits(digits.slice(0, -1)); setError(""); }
+
+  return (
+    <div style={overlayStyle}>
+      <div className="kal-sheet" style={{ ...sheetStyle, maxWidth: 340, textAlign: "center" }}>
+        <div style={{ fontSize: 32, marginBottom: 6 }}>🔒</div>
+        <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>Lås opp private oppføringer</div>
+        <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 18 }}>Samme PIN som Hemmelig i LifeHub</div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
+          {[0,1,2,3,4,5].map(i => (
+            <div key={i} style={{ width: 14, height: 14, borderRadius: "50%",
+              background: i < digits.length ? T.privat : "transparent",
+              border: `2px solid ${i < digits.length ? T.privat : T.border}` }}/>
+          ))}
+        </div>
+        {error && <div style={{ color: T.red, fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 12 }}>
+          {[1,2,3,4,5,6,7,8,9].map(n => (
+            <button key={n} onClick={() => press(n)} style={pinBtnStyle}>{n}</button>
+          ))}
+          <div/>
+          <button onClick={() => press(0)} style={pinBtnStyle}>0</button>
+          <button onClick={back} style={{ ...pinBtnStyle, fontSize: 20 }}>⌫</button>
+        </div>
+        <button onClick={onCancel} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 14, padding: 8 }}>Avbryt</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Ikon-chip for en hendelse ───────────────────────────────────────────────
+function EventIcon({ ev, unlocked, size = 15 }) {
+  const skjul = ev.privat && !unlocked;
+  return (
+    <span style={{ fontSize: size, lineHeight: 1, opacity: ev.upresis ? 0.55 : 1 }}
+          title={skjul ? "Privat" : ev.tittel}>
+      {skjul ? "🔒" : ev.ikon}
+    </span>
+  );
+}
+
+// ── Månedsvisning ───────────────────────────────────────────────────────────
+function MonthView({ cursor, events, unlocked, onSelectDay }) {
+  const year = cursor.getFullYear(), month = cursor.getMonth();
+  const first = new Date(year, month, 1);
+  const startOffset = (first.getDay() + 6) % 7; // man=0
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = startOfDay(new Date());
+
+  // gruppér hendelser per dato
+  const byDate = useMemo(() => {
+    const m = {};
+    events.forEach(e => { (m[e.dato] = m[e.dato] || []).push(e); });
+    return m;
+  }, [events]);
+
+  const cells = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  return (
+    <div style={{ padding: "0 8px 24px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 6 }}>
+        {["man","tir","ons","tor","fre","lør","søn"].map(d => (
+          <div key={d} style={{ textAlign: "center", fontSize: 11, color: T.textFaint, fontWeight: 600, padding: "4px 0" }}>{d}</div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
+        {cells.map((date, i) => {
+          if (!date) return <div key={i} />;
+          const key = ymd(date);
+          const evs = byDate[key] || [];
+          const isToday = sameYmd(date, today);
+          const isPast = startOfDay(date) < today;
+          const planEvs = evs.filter(e => e.type === "plan");
+          const loggEvs = evs.filter(e => e.type === "logg");
+          return (
+            <button key={i} onClick={() => onSelectDay(date)} style={{
+              aspectRatio: "1", background: isToday ? T.arbeidDim : T.bgCard,
+              border: `1px solid ${isToday ? T.arbeid : T.borderSoft}`,
+              borderRadius: 10, padding: "4px 3px", cursor: "pointer",
+              display: "flex", flexDirection: "column", alignItems: "stretch",
+              overflow: "hidden", position: "relative" }}>
+              <div style={{ fontSize: 12, fontWeight: isToday ? 800 : 600,
+                color: isToday ? T.arbeid : (isPast ? T.textFaint : T.text),
+                textAlign: "left", marginBottom: 2, flexShrink: 0 }}>{date.getDate()}</div>
+              {/* Todelt kun hvis passert OG har logg */}
+              {isPast && loggEvs.length > 0 ? (
+                <>
+                  <div style={iconRowStyle(true)}>
+                    {planEvs.slice(0,4).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={13} />)}
+                  </div>
+                  <div style={{ height: 1, background: T.border, margin: "1px 0" }} />
+                  <div style={iconRowStyle(false)}>
+                    {loggEvs.slice(0,4).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={13} />)}
+                  </div>
+                </>
+              ) : (
+                <div style={iconRowStyle(true)}>
+                  {evs.slice(0,6).map((e,j) => <EventIcon key={j} ev={e} unlocked={unlocked} size={13} />)}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+function iconRowStyle(top) {
+  return { display: "flex", flexWrap: "wrap", gap: 2, alignContent: top ? "flex-start" : "flex-end",
+    flex: 1, overflow: "hidden" };
+}
+
+// ── Ukesvisning ─────────────────────────────────────────────────────────────
+function WeekView({ cursor, events, unlocked, onSelectDay }) {
+  const monday = mondayOf(cursor);
+  const today = startOfDay(new Date());
+  const byDate = useMemo(() => {
+    const m = {};
+    events.forEach(e => { (m[e.dato] = m[e.dato] || []).push(e); });
+    return m;
+  }, [events]);
+
+  return (
+    <div style={{ padding: "0 12px 24px" }}>
+      {[0,1,2,3,4,5,6].map(i => {
+        const date = addDays(monday, i);
+        const key = ymd(date);
+        const evs = (byDate[key] || []).slice().sort((a,b) => (a.tid||"99") < (b.tid||"99") ? -1 : 1);
+        const isToday = sameYmd(date, today);
+        return (
+          <button key={i} onClick={() => onSelectDay(date)} style={{
+            width: "100%", textAlign: "left", background: isToday ? T.arbeidDim : T.bgCard,
+            border: `1px solid ${isToday ? T.arbeid : T.borderSoft}`, borderRadius: 12,
+            padding: "10px 12px", marginBottom: 8, cursor: "pointer", display: "flex",
+            alignItems: "center", gap: 12 }}>
+            <div style={{ minWidth: 44, textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: T.textFaint, textTransform: "uppercase" }}>{UKEDAG_LANG[date.getDay()].slice(0,3)}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: isToday ? T.arbeid : T.text }}>{date.getDate()}</div>
+            </div>
+            <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+              {evs.length === 0 ? <span style={{ fontSize: 12, color: T.textFaint }}>—</span> :
+                evs.map((e,j) => (
+                  <span key={j} style={{ display: "inline-flex", alignItems: "center", gap: 3,
+                    fontSize: 12, color: T.textMuted, background: T.bgCard2, borderRadius: 8, padding: "2px 6px" }}>
+                    <EventIcon ev={e} unlocked={unlocked} size={13} />
+                    {e.tid && <span style={{ fontSize: 10, color: T.textFaint }}>{e.tid}</span>}
+                  </span>
+                ))}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Dagsvisning ─────────────────────────────────────────────────────────────
+function DayView({ date, events, unlocked, settings, onClose, onAddEgen, onEditEgen, onRequestPin }) {
+  const key = ymd(date);
+  const dayEvents = events.filter(e => e.dato === key);
+  const glad = gladForDate(key);
+  const isPast = startOfDay(date) < startOfDay(new Date());
+
+  // Sortering styrt av settings.dagSort: "type" (default) | "tid"
+  const heldags = dayEvents.filter(e => e.allDay && e.type === "plan");
+  const tidsbaserte = dayEvents.filter(e => !e.allDay).sort((a,b) => (a.tid||"99:99").localeCompare(b.tid||"99:99"));
+  const loggRest = dayEvents.filter(e => e.allDay && e.type === "logg");
+
+  let seksjoner;
+  if ((settings.dagSort || "type") === "tid") {
+    const alle = dayEvents.slice().sort((a,b) => {
+      const at = a.tid || (a.type === "plan" ? "00:00" : "23:59");
+      const bt = b.tid || (b.type === "plan" ? "00:00" : "23:59");
+      return at.localeCompare(bt);
+    });
+    seksjoner = [{ tittel: null, evs: alle }];
+  } else {
+    seksjoner = [
+      { tittel: "Heldags", evs: heldags },
+      { tittel: "Tidspunkt", evs: tidsbaserte },
+      { tittel: "Logg", evs: loggRest },
+    ].filter(s => s.evs.length > 0);
+  }
+
+  return (
+    <div style={overlayStyle}>
+      <div className="kal-sheet" style={{ ...sheetStyle, maxWidth: 480, maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div>
+            <div style={{ fontSize: 12, color: T.textFaint, textTransform: "uppercase" }}>{UKEDAG_LANG[date.getDay()]}</div>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{date.getDate()}. {MND[date.getMonth()]}</div>
+          </div>
+          <button onClick={onClose} style={closeBtnStyle}>✕</button>
+        </div>
+
+        <div style={{ overflowY: "auto", flex: 1, marginTop: 12, paddingRight: 2 }}>
+          {seksjoner.length === 0 && !glad && (
+            <div style={{ textAlign: "center", color: T.textFaint, fontSize: 14, padding: "24px 0" }}>Ingenting denne dagen</div>
+          )}
+
+          {seksjoner.map((sek, si) => (
+            <div key={si} style={{ marginBottom: 16 }}>
+              {sek.tittel && <div style={sectionLabelStyle}>{sek.tittel}</div>}
+              {sek.evs.map((e, i) => {
+                const skjul = e.privat && !unlocked;
+                return (
+                  <div key={i} onClick={() => {
+                        if (skjul) { onRequestPin(); return; }
+                        if (e.egen) onEditEgen(e.raw);
+                      }}
+                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
+                        background: T.bgCard2, borderRadius: 10, marginBottom: 6,
+                        borderLeft: `3px solid ${e.farge}`, cursor: (e.egen || skjul) ? "pointer" : "default" }}>
+                    <span style={{ fontSize: 18 }}>{skjul ? "🔒" : e.ikon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: T.text,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {skjul ? "Privat oppføring" : e.tittel}
+                      </div>
+                      {e.tid && !skjul && <div style={{ fontSize: 12, color: T.textFaint }}>{e.tid}</div>}
+                    </div>
+                    {e.egen && !skjul && <span style={{ fontSize: 12, color: T.textFaint }}>›</span>}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
+          {/* Glad i Dag */}
+          {glad && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={sectionLabelStyle}>😊 Glad i Dag</div>
+              <div style={{ padding: "10px 12px", background: T.greenDim, borderRadius: 10,
+                fontSize: 14, color: T.text, borderLeft: `3px solid ${T.green}`, whiteSpace: "pre-wrap" }}>{glad}</div>
+            </div>
+          )}
+        </div>
+
+        <button onClick={() => onAddEgen(key)} style={{ ...primaryBtnStyle, marginTop: 12 }}>+ Ny oppføring</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Editor for egne oppføringer ─────────────────────────────────────────────
+const EMOJI_VALG = ["📌","⭐","🎬","📺","🎮","🎂","💰","🏋️","🧹","📓","🩺","🎵","✈️","🍽️","☕","🎉","💊","📞","🚗","🏥","🛒","💼","❤️","🔥","🌟","📅"];
+
+function EgenEditor({ entry, defaultDato, onSave, onDelete, onClose }) {
+  const [tittel, setTittel] = useState(entry ? entry.tittel : "");
+  const [dato, setDato] = useState(entry ? entry.dato : defaultDato);
+  const [harTid, setHarTid] = useState(entry ? !!entry.tid : false);
+  const [tid, setTid] = useState(entry && entry.tid ? entry.tid : "12:00");
+  const [ikon, setIkon] = useState(entry ? entry.ikon || "📌" : "📌");
+  const [privat, setPrivat] = useState(entry ? !!entry.privat : false);
+  const [notat, setNotat] = useState(entry ? entry.notat || "" : "");
+
+  function lagre() {
+    if (!tittel.trim()) return;
+    onSave({
+      id: entry ? entry.id : "k" + Date.now(),
+      tittel: tittel.trim(), dato, tid: harTid ? tid : null,
+      ikon, privat, notat: notat.trim(), type: "plan",
+    });
+  }
+
+  return (
+    <div style={overlayStyle}>
+      <div className="kal-sheet" style={{ ...sheetStyle, maxWidth: 440, maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>{entry ? "Rediger oppføring" : "Ny oppføring"}</div>
+          <button onClick={onClose} style={closeBtnStyle}>✕</button>
+        </div>
+
+        <label style={labelStyle}>Tittel</label>
+        <input value={tittel} onChange={e => setTittel(e.target.value)} placeholder="Hva skjer?" style={inputStyle} autoFocus />
+
+        <label style={labelStyle}>Ikon</label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+          {EMOJI_VALG.map(em => (
+            <button key={em} onClick={() => setIkon(em)} style={{
+              fontSize: 20, width: 40, height: 40, borderRadius: 10, cursor: "pointer",
+              background: ikon === em ? T.fritidDim : T.bgCard2,
+              border: `2px solid ${ikon === em ? T.fritid : "transparent"}` }}>{em}</button>
+          ))}
+        </div>
+
+        <label style={labelStyle}>Dato</label>
+        <input type="date" value={dato} onChange={e => setDato(e.target.value)} style={inputStyle} />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, marginTop: 4 }}>
+          <input type="checkbox" id="harTid" checked={harTid} onChange={e => setHarTid(e.target.checked)} style={{ width: 18, height: 18 }} />
+          <label htmlFor="harTid" style={{ fontSize: 14, color: T.text }}>Bestemt tidspunkt</label>
+          {harTid && <input type="time" value={tid} onChange={e => setTid(e.target.value)} style={{ ...inputStyle, marginBottom: 0, width: "auto", flex: 1 }} />}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "10px 12px",
+          background: privat ? T.privatDim : T.bgCard2, borderRadius: 10,
+          border: `1px solid ${privat ? T.privat : "transparent"}` }}>
+          <input type="checkbox" id="privat" checked={privat} onChange={e => setPrivat(e.target.checked)} style={{ width: 18, height: 18 }} />
+          <label htmlFor="privat" style={{ fontSize: 14, color: T.text }}>🔒 Privat oppføring (skjules bak PIN)</label>
+        </div>
+
+        <label style={labelStyle}>Notat (valgfritt)</label>
+        <textarea value={notat} onChange={e => setNotat(e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          {entry && <button onClick={() => onDelete(entry.id)} style={{ background: "none", border: `1px solid ${T.red}`, color: T.red, borderRadius: 10, padding: "10px 16px", cursor: "pointer", fontSize: 14 }}>🗑️</button>}
+          <button onClick={lagre} style={{ ...primaryBtnStyle, flex: 1, marginTop: 0 }}>Lagre</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+function SettingsPanel({ settings, onChange, onClose }) {
+  const toggles = settings.toggles || {};
+  function setToggle(key, val) {
+    onChange({ ...settings, toggles: { ...toggles, [key]: val } });
+  }
+  const grupper = [
+    { navn: "Arbeid", farge: T.arbeid, keys: KATEGORIER.filter(k => k.gruppe === "arbeid") },
+    { navn: "Fritid", farge: T.fritid, keys: KATEGORIER.filter(k => k.gruppe === "fritid") },
+    { navn: "Logg", farge: T.textMuted, keys: KATEGORIER.filter(k => k.gruppe === "logg") },
+    { navn: "Privat 🔒", farge: T.privat, keys: KATEGORIER.filter(k => k.gruppe === "privat") },
+  ];
+
+  return (
+    <div style={overlayStyle}>
+      <div className="kal-sheet" style={{ ...sheetStyle, maxWidth: 440, maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>Innstillinger</div>
+          <button onClick={onClose} style={closeBtnStyle}>✕</button>
+        </div>
+
+        <div style={sectionLabelStyle}>Standardvisning</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+          {[["maned","Måned"],["uke","Uke"],["dag","Dagens dag"]].map(([v,l]) => (
+            <button key={v} onClick={() => onChange({ ...settings, defaultView: v })} style={{
+              flex: 1, padding: "10px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600,
+              background: (settings.defaultView || "maned") === v ? T.arbeidDim : T.bgCard2,
+              border: `1px solid ${(settings.defaultView || "maned") === v ? T.arbeid : "transparent"}`,
+              color: (settings.defaultView || "maned") === v ? T.arbeid : T.textMuted }}>{l}</button>
+          ))}
+        </div>
+
+        <div style={sectionLabelStyle}>Rekkefølge i dagsvisning</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+          {[["type","Etter type"],["tid","Kronologisk"]].map(([v,l]) => (
+            <button key={v} onClick={() => onChange({ ...settings, dagSort: v })} style={{
+              flex: 1, padding: "10px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600,
+              background: (settings.dagSort || "type") === v ? T.arbeidDim : T.bgCard2,
+              border: `1px solid ${(settings.dagSort || "type") === v ? T.arbeid : "transparent"}`,
+              color: (settings.dagSort || "type") === v ? T.arbeid : T.textMuted }}>{l}</button>
+          ))}
+        </div>
+
+        <div style={sectionLabelStyle}>Kategorier</div>
+        {grupper.map(g => (
+          <div key={g.navn} style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: g.farge, marginBottom: 6 }}>{g.navn}</div>
+            {g.keys.map(k => {
+              const on = toggles[k.key] !== false;
+              return (
+                <div key={k.key} onClick={() => setToggle(k.key, !on)} style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "9px 12px",
+                  background: T.bgCard2, borderRadius: 10, marginBottom: 5, cursor: "pointer" }}>
+                  <span style={{ fontSize: 17 }}>{k.ikon}</span>
+                  <span style={{ flex: 1, fontSize: 14, color: on ? T.text : T.textFaint }}>{k.label}</span>
+                  <div style={{ width: 40, height: 24, borderRadius: 12, background: on ? g.farge : T.border,
+                    position: "relative", transition: "background 0.15s" }}>
+                    <div style={{ position: "absolute", top: 2, left: on ? 18 : 2, width: 20, height: 20,
+                      borderRadius: "50%", background: "#fff", transition: "left 0.15s" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+
+        <div style={{ textAlign: "center", fontSize: 11, color: T.textFaint, marginTop: 16 }}>
+          Kalender v{VERSION}<br/>Leser data fra LifeHub
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  HOVEDAPP
+// ═══════════════════════════════════════════════════════════════════════════
+function App() {
+  const [settings, setSettings] = useState(() => lsGet("kalender:settings", { defaultView: "maned", dagSort: "type", toggles: {} }));
+  // App-shortcut kan overstyre startvisning via ?view=
+  const urlView = (() => { try { return new URLSearchParams(location.search).get("view"); } catch(_) { return null; } })();
+  const startView = urlView === "uke" ? "uke" : urlView === "dag" ? "dag" : (settings.defaultView || "maned");
+  const [view, setView] = useState(startView === "dag" ? "maned" : startView);
+  const [cursor, setCursor] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState(startView === "dag" ? new Date() : null);
+  const [unlocked, setUnlocked] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [egenEditor, setEgenEditor] = useState(null); // { entry?, defaultDato }
+  const [tick, setTick] = useState(0); // force refresh etter lagring
+
+  function saveSettings(s) { setSettings(s); lsSet("kalender:settings", s); }
+
+  // Beregn dato-vindu for aktiv visning (litt margin for å dekke synlige celler)
+  const [from, to] = useMemo(() => {
+    if (view === "uke") {
+      const mon = mondayOf(cursor);
+      return [addDays(mon, -1), addDays(mon, 8)];
+    }
+    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const last = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    return [addDays(first, -7), addDays(last, 7)];
+  }, [view, cursor, tick]);
+
+  const events = useMemo(() => buildEvents(from, to, settings), [from, to, settings, tick, unlocked]);
+
+  // For dagsvisning trenger vi hendelser for den dagen (eget smalt vindu)
+  const dayEvents = useMemo(() => {
+    if (!selectedDay) return [];
+    const d = startOfDay(selectedDay);
+    return buildEvents(addDays(d, -1), addDays(d, 1), settings).filter(e => e.dato === ymd(d));
+  }, [selectedDay, settings, tick, unlocked]);
+
+  function step(dir) {
+    if (view === "uke") setCursor(addDays(cursor, dir * 7));
+    else setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + dir, 1));
+  }
+  function goToday() { setCursor(new Date()); }
+
+  // Egne oppføringer CRUD
+  function saveEgen(entry) {
+    const list = lsGet("kalender:hendelser", []);
+    const idx = list.findIndex(x => x.id === entry.id);
+    if (idx >= 0) list[idx] = entry; else list.push(entry);
+    lsSet("kalender:hendelser", list);
+    setEgenEditor(null);
+    setTick(t => t + 1);
+  }
+  function deleteEgen(id) {
+    const list = lsGet("kalender:hendelser", []).filter(x => x.id !== id);
+    lsSet("kalender:hendelser", list);
+    setEgenEditor(null);
+    setTick(t => t + 1);
+  }
+
+  const tittel = view === "uke"
+    ? (() => { const { week } = isoWeek(cursor); return `Uke ${week} · ${cursor.getFullYear()}`; })()
+    : `${MND[cursor.getMonth()].charAt(0).toUpperCase() + MND[cursor.getMonth()].slice(1)} ${cursor.getFullYear()}`;
+
+  return (
+    <div style={{ maxWidth: 560, margin: "0 auto", minHeight: "100vh", paddingTop: "env(safe-area-inset-top)" }}>
+      {/* Topbar */}
+      <div style={{ padding: "14px 16px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 20, fontWeight: 800 }}>📅 {tittel}</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => unlocked ? setUnlocked(false) : setShowPin(true)} title="Privat"
+            style={{ ...iconBtnStyle, color: unlocked ? T.privat : T.textFaint,
+              background: unlocked ? T.privatDim : T.bgCard }}>
+            {unlocked ? "🔓" : "🔒"}
+          </button>
+          <button onClick={() => setShowSettings(true)} style={iconBtnStyle}>⚙️</button>
+        </div>
+      </div>
+
+      {/* Visningsvelger + navigasjon */}
+      <div style={{ padding: "0 16px 10px", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", background: T.bgCard, borderRadius: 10, padding: 3, flex: 1 }}>
+          {[["maned","Måned"],["uke","Uke"]].map(([v,l]) => (
+            <button key={v} onClick={() => setView(v)} style={{
+              flex: 1, padding: "8px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
+              background: view === v ? T.bgCard2 : "transparent", color: view === v ? T.text : T.textFaint }}>{l}</button>
+          ))}
+        </div>
+        <button onClick={() => step(-1)} style={navBtnStyle}>‹</button>
+        <button onClick={goToday} style={{ ...navBtnStyle, width: "auto", padding: "0 12px", fontSize: 13, fontWeight: 700 }}>I dag</button>
+        <button onClick={() => step(1)} style={navBtnStyle}>›</button>
+      </div>
+
+      <div className="kal-fade" key={view + ymd(cursor)}>
+        {view === "maned"
+          ? <MonthView cursor={cursor} events={events} unlocked={unlocked} onSelectDay={setSelectedDay} />
+          : <WeekView cursor={cursor} events={events} unlocked={unlocked} onSelectDay={setSelectedDay} />}
+      </div>
+
+      {/* Modaler */}
+      {selectedDay && (
+        <DayView date={selectedDay} events={dayEvents} unlocked={unlocked} settings={settings}
+          onClose={() => setSelectedDay(null)}
+          onAddEgen={(dato) => setEgenEditor({ defaultDato: dato })}
+          onEditEgen={(raw) => setEgenEditor({ entry: raw, defaultDato: raw.dato })}
+          onRequestPin={() => setShowPin(true)} />
+      )}
+      {egenEditor && (
+        <EgenEditor entry={egenEditor.entry} defaultDato={egenEditor.defaultDato || todayYmd()}
+          onSave={saveEgen} onDelete={deleteEgen} onClose={() => setEgenEditor(null)} />
+      )}
+      {showSettings && (
+        <SettingsPanel settings={settings} onChange={saveSettings} onClose={() => setShowSettings(false)} />
+      )}
+      {showPin && (
+        <PinModal onSuccess={() => { setUnlocked(true); setShowPin(false); }} onCancel={() => setShowPin(false)} />
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  STILER
+// ═══════════════════════════════════════════════════════════════════════════
+const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
+  display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100, padding: 0 };
+const sheetStyle = { background: T.bgSheet, borderRadius: "20px 20px 0 0", padding: "20px 18px calc(20px + env(safe-area-inset-bottom))",
+  width: "100%", boxShadow: "0 -8px 40px rgba(0,0,0,0.5)" };
+const inputStyle = { width: "100%", padding: "11px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+  background: T.bgCard, color: T.text, fontSize: 15, marginBottom: 12, outline: "none" };
+const labelStyle = { display: "block", fontSize: 12, color: T.textMuted, marginBottom: 6, fontWeight: 600 };
+const sectionLabelStyle = { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5,
+  color: T.textFaint, fontWeight: 700, marginBottom: 8 };
+const primaryBtnStyle = { width: "100%", padding: "13px", borderRadius: 12, border: "none",
+  background: T.arbeid, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" };
+const closeBtnStyle = { background: T.bgCard2, border: "none", color: T.textMuted, width: 32, height: 32,
+  borderRadius: 8, cursor: "pointer", fontSize: 16 };
+const iconBtnStyle = { background: T.bgCard, border: `1px solid ${T.borderSoft}`, color: T.textMuted,
+  width: 40, height: 40, borderRadius: 10, cursor: "pointer", fontSize: 17 };
+const navBtnStyle = { background: T.bgCard, border: `1px solid ${T.borderSoft}`, color: T.text,
+  width: 40, height: 40, borderRadius: 10, cursor: "pointer", fontSize: 20, fontWeight: 700, flexShrink: 0 };
+const pinBtnStyle = { padding: "16px", borderRadius: 12, border: "none", background: T.bgCard2,
+  color: T.text, fontSize: 20, fontWeight: 600, cursor: "pointer" };
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+// Registrer service worker (offline)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+  </script>
+</body>
+</html>
