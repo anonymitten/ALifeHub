@@ -90,7 +90,7 @@ function useFadeIn() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.28-04";
+const APP_VERSION = "2026.07.28-05";
 
 // ── Motivasjoner (336 oppføringer) ────────────────────────────────────────────
 // Storage: motivasjon:dag { date, index, tekst }
@@ -4161,7 +4161,22 @@ function SettingsModal({ t, darkMode, onToggleDark, onClose }) {
     const data = {};
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k) data[k] = localStorage.getItem(k);
+      if (!k) continue;
+      let v = localStorage.getItem(k);
+      // Slank backup: dropp cachet ICS-innhold fra kalender-feeds (hentes ferskt uansett)
+      if (k === "kalender:feeds") {
+        try {
+          const feeds = JSON.parse(v);
+          if (Array.isArray(feeds)) {
+            const slanke = feeds.map(f => {
+              const { cache, ...resten } = f;
+              return resten;
+            });
+            v = JSON.stringify(slanke);
+          }
+        } catch (_) { /* behold original hvis parsing feiler */ }
+      }
+      data[k] = v;
     }
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: "application/json" });
