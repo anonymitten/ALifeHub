@@ -90,7 +90,7 @@ function useFadeIn() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────────
-const APP_VERSION = "2026.07.28-02";
+const APP_VERSION = "2026.07.28-04";
 
 // ── Motivasjoner (336 oppføringer) ────────────────────────────────────────────
 // Storage: motivasjon:dag { date, index, tekst }
@@ -11570,6 +11570,7 @@ function pkBlank() {
     navn: "",
     relasjon: "nær",
     bursdag: "",
+    visIKalender: true,
     liker: [],
     likerIkke: [],
     grønneFlagg: [],
@@ -11679,6 +11680,19 @@ function PkForm({ entry: init, onSave, onCancel, t }) {
               <input type="date" value={e.bursdag} onChange={ev => upd("bursdag", ev.target.value)} style={inputSt} />
             </div>
           </div>
+          {e.bursdag && (
+            <div onClick={() => upd("visIKalender", e.visIKalender === false ? true : false)}
+              style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, cursor: "pointer" }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                border: `2px solid ${e.visIKalender === false ? t.border : t.orange}`,
+                background: e.visIKalender === false ? "transparent" : t.orange,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#fff", fontSize: 14, fontWeight: 700 }}>
+                {e.visIKalender === false ? "" : "✓"}
+              </div>
+              <span style={{ fontSize: 13, color: t.textMuted }}>📅 Vis bursdag i kalenderen</span>
+            </div>
+          )}
         </div>
 
         {/* Liker / liker ikke */}
@@ -15452,6 +15466,24 @@ function SplashScreen({ t, onSelect, darkMode, onToggleDark }) {
             : pulse
               ? <div style={{ background: t.green, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "#fff" }}>Husk!</div>
               : null}
+        </button>
+
+        {/* Kalender */}
+        <button onClick={() => { window.location.href = "kalender.html"; }}
+          style={{
+            width: "100%", padding: "16px 20px", borderRadius: 22, cursor: "pointer", textAlign: "left",
+            display: "flex", alignItems: "center", gap: 16, marginTop: 14,
+            background: t.orangeDim, border: `1.5px solid ${t.orangeBorder}`,
+            transition: "transform 0.1s",
+          }}
+          onMouseEnter={e => e.currentTarget.style.transform = "scale(1.01)"}
+          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+          <span style={{ fontSize: 28 }}>📅</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: t.orange, marginBottom: 2 }}>Kalender</div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>Alt på ett sted — planer, frister og logg</div>
+          </div>
+          <span style={{ fontSize: 18, color: t.textFaint }}>›</span>
         </button>
 
         {/* Motivasjonskort */}
